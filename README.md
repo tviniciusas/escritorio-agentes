@@ -11,7 +11,7 @@ Um escritório em pixel art que roda no navegador e mostra, ao vivo, os agentes 
 - **Sem dependências.** Só Node 20 ou mais novo: nada de `npm install`.
 - **Sem hooks.** Ele só lê as transcrições que cada agente já grava em disco.
 - **Ao vivo.** O servidor varre as transcrições a cada 1,5 s e empurra o estado para a página por [SSE](https://developer.mozilla.org/pt-BR/docs/Web/API/Server-sent_events).
-- **Tudo desenhado em código.** Pessoas, móveis, carpetes, plantas e a fonte bitmap 3×5 (com acentos) são gerados num `<canvas>`, sem nenhuma imagem.
+- **Tudo desenhado em código.** Pessoas, móveis, piso, carpetes, plantas e os textos (nomes, balões e nomes das áreas) são gerados num `<canvas>`, sem nenhuma imagem.
 
 ## Começar
 
@@ -36,7 +36,7 @@ PASTAS_GRUPO=Empresa npm start  # "projetos/Empresa/loja" aparece só como "loja
 |---|---|
 | <img src="docs/imagens/zoom.png" alt="Zonas do Claude Code, Cursor, DeepSeek e Alibaba com os agentes nas mesas e balões de ferramenta" width="560"> | <img src="docs/imagens/celular.png" alt="O escritório numa tela de celular, com a lista de agentes recolhida embaixo" width="220"> |
 
-Cada plataforma ganha uma zona com carpete na cor dela. A parede dos fundos tem janelas, quadros, estante e o elevador, por onde os agentes chegam e vão embora. O lounge, com sofá e tapete, é para quem está ocioso.
+Cada plataforma ganha uma zona de carpete xadrez neutro, com mesas brancas de postos diferentes entre si. A cor da plataforma aparece em detalhes: a bolinha do nome da área, as telas dos monitores, a faixa da cadeira e a plaquinha da mesa. A parede dos fundos tem janelas, quadros, estante e o elevador, por onde os agentes chegam e vão embora. O lounge, com piso em ziguezague, sofás e divisórias baixas de madeira, é para quem está ocioso.
 
 **Visão geral, com a lista de agentes**
 
@@ -181,12 +181,12 @@ POST /api/agente ─────────────────────
 | [`fontes/cursor.js`](fontes/cursor.js) | Agentes do Cursor. |
 | [`fontes/outras.js`](fontes/outras.js) | Codex e Gemini. |
 | [`fontes/historico.js`](fontes/historico.js) | Leitura incremental do histórico completo de um agente. |
-| [`public/render.js`](public/render.js) | A cena: tiles, zonas, móveis, pessoas, caminhos (BFS), balões e fonte bitmap. |
+| [`public/render.js`](public/render.js) | A cena: tiles, zonas, móveis, pessoas, caminhos (BFS), nomes e balões. |
 | [`public/app.js`](public/app.js) | Lista, filtros, zoom, seleção e a ligação com o SSE. |
 | [`public/detalhe.js`](public/detalhe.js) | O painel de detalhe (Agora, Histórico, Ferramentas, Contexto). |
 | [`public/demo.js`](public/demo.js) | Os agentes de mentira do `?demo=1`. |
 
-O mundo é desenhado em pixels lógicos e ampliado por um fator inteiro, então os pixels ficam nítidos em qualquer zoom. A profundidade sai do y dos pés: quem está mais embaixo na tela é desenhado na frente.
+O mundo é desenhado em pixels lógicos e ampliado por um fator inteiro, então os pixels ficam nítidos em qualquer zoom; os textos (nomes e balões) são desenhados depois, em resolução de tela, com a fonte do sistema. A profundidade sai do y dos pés: quem está mais embaixo na tela é desenhado na frente.
 
 ## Privacidade
 
