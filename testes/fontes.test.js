@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resumirTranscricao } from '../fontes/claude.js';
 import { resumirCursor, projetoDoCursor } from '../fontes/cursor.js';
-import { criarFonteExterna } from '../fontes/outras.js';
+import { criarFonteExterna, resumirCodex } from '../fontes/outras.js';
 import { detalheDaFerramenta } from '../fontes/util.js';
 
 const agora = Date.parse('2026-11-18T23:00:00Z');
@@ -69,4 +69,43 @@ test('detalhe das ferramentas', () => {
   assert.equal(detalheDaFerramenta('Edit', { file_path: 'D:\\x\\y\\z.ts' }), 'z.ts');
   assert.equal(detalheDaFerramenta('WebFetch', { url: 'https://github.com/a/b' }), 'github.com');
   assert.equal(detalheDaFerramenta('Grep', { pattern: 'foo' }), 'foo');
+});
+
+// ---- Codex (formato rollout *.jsonl do Codex ≥ 0.16x) ----
+const cxMeta = (cwd) => ({ type: 'session_meta', payload: { id: 's1', cwd, cli_version: '0.166.0' } });
+const cxTurno = (model, cwd) => ({ type: 'turn_context', payload: { model, cwd } });
+const cxUser = (texto) => ({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: texto }] } });
+const cxFala = (texto) => ({ type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: texto }] } });
+const cxTool = (name, input) => ({ type: 'response_item', payload: { type: 'custom_tool_call', call_id: 'c1', name, input } });
+const cxOut = () => ({ type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'c1', output: 'ok' } });
+const cxDone = () => ({ type: 'event_msg', payload: { type: 'task_complete' } });
+
+test('Codex: projeto, modelo e título vêm do início da sessão', () => {
+  const r = resumirCodex([
+    cxMeta('/Users/x/aspire/guide-106873'),
+    cxTurno('gpt-6.1-terra', '/Users/x/aspire/guide-106873'),
+    cxUser('Edite o guia QA no lugar'),
+  ]);
+  assert.equal(r.projeto, 'guide-106873');
+  assert.equal(r.nome, 'guide-106873');
+  assert.equal(r.modelo, 'gpt-6.1-terra');
+  assert.equal(r.titulo, 'Edite o guia QA no lugar');
+});
+
+test('Codex: ferramenta chamada = trabalhando; saída volta = pensando', () => {
+  const base = [cxMeta('/x/meu-proj'), cxUser('rode os testes')];
+  assert.equal(resumirCodex([...base, cxTool('exec', 'ls')]).estado, 'trabalhando');
+  assert.equal(resumirCodex([...base, cxTool('exec', 'ls')]).ferramenta, 'exec');
+  assert.equal(resumirCodex([...base, cxTool('exec', 'ls'), cxOut()]).estado, 'pensando');
+});
+
+test('Codex: task_complete = ocioso; environment_context não vira título', () => {
+  const r = resumirCodex([
+    cxMeta('/x/meu-proj'),
+    cxUser('<environment_context>\n  <cwd>/x</cwd>\n</environment_context>'),
+    cxUser('o pedido de verdade'),
+    cxTool('exec', 'ls'), cxOut(), cxDone(),
+  ]);
+  assert.equal(r.estado, 'ocioso');
+  assert.equal(r.titulo, 'o pedido de verdade');
 });
