@@ -585,7 +585,8 @@ function buildPerson(a, o) {
   const sit = pose === 'sitD' || pose === 'sitS';
   const by = walk ? (f & 1 ? -1 : 0) : (sit ? 0 : o.bob);
   const hy = -23 + by, st = cl.style, of = cl.outfit;
-  if (pose !== 'sitD') softShadow(g, 16, 36, 8, 2);
+  if (pose !== 'sitD' && !o.semSombra) softShadow(g, 16, 36, 8, 2);
+  const gole = pose === 'stand' && f === 1 && o.cup && !side && !back;   // levando a caneca à boca
 
   // ---- pernas e sapatos ----
   if (pose === 'sitS') {
@@ -622,8 +623,11 @@ function buildPerson(a, o) {
     } else {
       const aL = walk ? [1, 0, -1, 0][f] : 0, aR = walk ? [-1, 0, 1, 0][f] : 0;
       P(-6, -13 + by + aL, 2, 5, pal.shirt, pal.shirtO); P(-6, -8 + by + aL, 2, 2, cl.skin, cl.skinO);
-      P(4, -13 + by + aR, 2, 5, pal.shirt, pal.shirtO); P(4, -8 + by + aR, 2, 2, cl.skin, cl.skinO);
-      if (o.cup) P(5, -11 + by, 3, 3, '#f4efe6', '#6b5a48');
+      if (gole) P(4, -13 + by, 2, 3, pal.shirt, pal.shirtO);
+      else {
+        P(4, -13 + by + aR, 2, 5, pal.shirt, pal.shirtO); P(4, -8 + by + aR, 2, 2, cl.skin, cl.skinO);
+        if (o.cup) P(5, -11 + by, 3, 3, '#f4efe6', '#6b5a48');
+      }
     }
   }
   // ---- cabeça: rosto e cabelo (partes) ----
@@ -654,6 +658,9 @@ function buildPerson(a, o) {
     else if (st === 4) { P(-7, hy - 5, 14, 14, cl.hair, cl.hairO); P(-5, hy - 6, 10, 1, cl.hair, cl.hairO); }
     else { P(-6, hy - 4, 12, 5, cl.cap, cl.capO); P(-1, hy - 5, 2, 1, cl.capD, cl.capO); P(-5, hy + 1, 10, 8, cl.hair, cl.hairO); }
     P(-3, hy + 9, 6, 1, cl.skin, cl.skinO);                                                              // nuca
+  }
+  if (gole) {                                          // antebraço dobrado e a caneca na boca, por cima do rosto
+    P(3, -15 + by, 2, 3, pal.shirt, pal.shirtO); P(2, hy + 9, 2, 2, cl.skin, cl.skinO); P(-1, hy + 7, 3, 3, '#f4efe6', '#6b5a48');
   }
   if (pose === 'arm') {                                // braço erguido por cima do cabelo (atrás da cabeça ou esticado à frente)
     if (f === 0) { P(-6, -17 + by, 2, 4, pal.shirtL, pal.shirtO); P(-8, -20 + by, 2, 3, pal.shirtL, pal.shirtO); P(-9, -22 + by, 2, 2, cl.skin, cl.skinO); }
@@ -1059,7 +1066,7 @@ export class Office {
     for (const [u0, v] of [[lx + 3, 0], [lx + 6, 1]]) {
       add(T_SPR, sprSofa(v), u0 * T, T, T);
       blk(u0, 0); blk(u0 + 1, 0);
-      for (const dx of [0, 1]) w.spots.push({ gx: u0 + dx, gy: 1, px: u0 + 0.62 + dx * 0.76, py: 18 / T, seat: true, kid: 'S' + (u0 + dx), owner: null });
+      for (const dx of [0, 1]) w.spots.push({ gx: u0 + dx, gy: 1, px: u0 + 0.62 + dx * 0.76, py: 18 / T, seat: true, sofa: u0, kid: 'S' + (u0 + dx), owner: null });
     }
     add(T_SPR, sprTable(), (lx + 5) * T + 8, 3 * T, 3 * T); blk(lx + 5, 2);
     // as divisórias do lounge ficam na borda dos tiles; os tiles encostados nelas ficam fechados para ninguém atravessar a madeira
@@ -1230,6 +1237,7 @@ export class Office {
     const w = this.world;
     for (const sp of w.spots) sp.owner = null;
     for (const a of this.actors.values()) {
+      a.deitado = null;
       if (a.kind === 'lounge' || a.kind === 'arcade') {
         const sp = w.spotByKey.get(a.spotKey);
         if (sp && !sp.owner) { sp.owner = a.id; a.spot = sp; } else { a.spot = null; a.kind = 'none'; }
@@ -1260,6 +1268,7 @@ export class Office {
     else if (this.dir.querArcade(a, now)) want = 'arcade';   // só esperando os subagentes: vai jogar
     else if (d.estado === 'ocioso') want = (a.kind === 'desk' && now - a.estadoSince < IDLE_DELAY) ? 'desk' : 'lounge';
     else want = 'desk';
+    if (want !== 'exit') want = this.dir.pausa(a, now, want);   // a caminho do lounge, passa na cafeteira
     if (want === a.kind) return;
     this.assign(a, want, now, direct);
   }
@@ -1272,6 +1281,9 @@ export class Office {
     } else if (kind === 'lounge') {
       const sp = this.allocSpot(a);
       tx = sp.gx; ty = sp.gy; fx = sp.px; fy = sp.py;
+    } else if (kind === 'cafe') {                  // na frente da cafeteira
+      const c = this.dir.lugarCafe(a);
+      tx = c.gx; ty = c.gy; fx = c.px; fy = c.py;
     } else if (kind === 'arcade') {                // fliperama livre; lotado, fica no lounge
       let sp = this.dir.vagaArcade(a);
       if (sp) { a.spot = sp; a.spotKey = sp.kid; } else sp = this.allocSpot(a);
@@ -1285,13 +1297,19 @@ export class Office {
   allocSpot(a) {
     const sp = this.world.spots;
     let pick = null;
-    for (const s of sp) if (!s.owner) { pick = s; break; }
+    // primeiro um sofá vazio (quem cochilar ali deita nos dois lugares), depois qualquer lugar livre
+    for (const s of sp) if (!s.owner && s.seat && !sp.some((o) => o !== s && o.seat && o.sofa === s.sofa && o.owner)) { pick = s; break; }
+    if (!pick) for (const s of sp) if (!s.owner) { pick = s; break; }
     if (!pick) pick = sp[hashStr(a.id) % sp.length]; // lotado: divide o lugar
     else pick.owner = a.id;
     a.spot = pick; a.spotKey = pick.kid;
     return pick;
   }
-  freeSpot(a) { if (a.spot && a.spot.owner === a.id) a.spot.owner = null; a.spot = null; }
+  freeSpot(a) {
+    if (a.spot && a.spot.owner === a.id) a.spot.owner = null;
+    if (a.deitado && a.deitado.owner === a.id) a.deitado.owner = null;   // o outro lugar do sofá, de quem deitou
+    a.spot = null; a.deitado = null;
+  }
 
   // BFS a partir do destino; depois anda preferindo seguir em linha reta
   planPath(a, gx, gy, fx, fy) {
@@ -1474,6 +1492,7 @@ export class Office {
       }
       case T_COFFEE: {                                        // vapor subindo da cafeteira
         g.drawImage(it.spr.c, it.x - it.spr.ax, it.y - it.spr.ay);
+        this.dir.cafeteira(g, it, now);                       // café caindo na caneca quando alguém está servindo
         for (let i = 0; i < 3; i++) {
           const p = (now / 1500 + i / 3) % 1, sx = it.x + 3 + Math.round(Math.sin(p * 6 + i * 2) * 1.5), sy = it.y - 34 - Math.round(p * 10);
           g.globalAlpha = (1 - p) * 0.6; rect(g, sx, sy, 2, 2, '#ffffff'); rect(g, sx + 1, sy - 1, 1, 1, '#ffffff');
@@ -1525,12 +1544,25 @@ export class Office {
     // animações: a pose e o deslocamento podem vir do diretor (4 fliperama, 5 braço erguido, 6 comemorando)
     const ov = this.dir.pose(a, now);
     a.semMaos = !!(ov && ov.semMaos);
+    a.ovx = null; a.ovy = null;
     if (ov) {
       if (ov.pidx != null) { pidx = ov.pidx; dir = ov.dir || 0; frame = ov.frame || 0; cup = 0; }
+      if (ov.cup != null) cup = ov.cup;
+      if (ov.frame != null) frame = ov.frame;
       ox = ov.ox || 0; oy = ov.oy || 0;
     }
+    // área de clique (pixels do dispositivo)
+    const k = this.k;
+    a.hit.x0 = (a.fx - 9) * k + this.tx; a.hit.x1 = (a.fx + 9) * k + this.tx;
+    a.hit.y0 = (a.fy - HEAD_H - 4) * k + this.ty; a.hit.y1 = (a.fy + (sitting ? -1 : 2)) * k + this.ty;
+    if (ov && ov.deitado) {                                  // soneca deitado no sofá: o diretor desenha
+      if (a.alpha < 1) g.globalAlpha = a.alpha;
+      this.dir.deitado(g, a, now);
+      g.globalAlpha = 1; a.dox = 0; a.doy = 0;
+      return;
+    }
     const bob = pidx === 0 && ((((now + a.phase) / 700) | 0) & 1) ? 1 : 0;
-    const blink = ((now + a.phase * 3) % 4300) < 140 ? 1 : 0;
+    const blink = ov && ov.olhosFechados ? 1 : ((now + a.phase * 3) % 4300) < 140 ? 1 : 0;
     const idx = ((((pidx * 4 + dir) * 4 + frame) * 2 + bob) * 2 + blink) * 2 + cup;
     let s = a.sprs[idx];
     if (!s) {
@@ -1545,10 +1577,6 @@ export class Office {
     }
     a.dox = ox; a.doy = oy;                           // o diretor desenha os extras depois de todos os itens
     g.globalAlpha = 1;
-    // área de clique (pixels do dispositivo)
-    const k = this.k;
-    a.hit.x0 = (a.fx - 9) * k + this.tx; a.hit.x1 = (a.fx + 9) * k + this.tx;
-    a.hit.y0 = (a.fy - HEAD_H - 4) * k + this.ty; a.hit.y1 = (a.fy + (sitting ? -1 : 2)) * k + this.ty;
   }
 
   // linhas pontilhadas: de quem chamou (paiId) até o chamado que está trabalhando
@@ -1643,7 +1671,7 @@ export class Office {
   measureOverlay(a, now, hl) {
     if (a.alpha < 0.05) return null;
     const k = this.k, fs = this.fs, d = a.d, gap = Math.max(1, Math.round(this.dpr));
-    const hx = Math.round(a.fx * k + this.tx), hy = Math.round((a.fy - HEAD_H) * k + this.ty);
+    const hx = Math.round((a.ovx ?? a.fx) * k + this.tx), hy = Math.round((a.ovy ?? a.fy - HEAD_H) * k + this.ty);
     const mx = 300 * this.dpr;
     if (hx < -mx || hx > this.W + mx || hy < -200 * this.dpr || hy > this.H + 100 * this.dpr) return null;
     const rel = !hl && this.selectedId && (d.paiId === this.selectedId || (this.actors.get(this.selectedId) || {}).d?.paiId === a.id);
@@ -1662,7 +1690,7 @@ export class Office {
       else if (d.estado === 'esperando') bs = bubbleWait((((now + a.phase) / 450) | 0) % 5, bf);
     }
     const bw = bs ? bs.pw : 0, bh = bs ? bs.ph : 0;
-    const zz = !bs && a.arrived && a.kind === 'lounge' && now - a.arrivedAt > ZZ_DELAY;
+    const zz = !bs && (this.dir.on ? this.dir.dormindo(a, now) : a.arrived && a.kind === 'lounge' && now - a.arrivedAt > ZZ_DELAY);
     const lr = { x0: hx - (lw >> 1), x1: hx - (lw >> 1) + lw, y0: ly, y1: ly + lh };
     let br = null;
     if (bs) br = { x0: hx - (bw >> 1), x1: hx - (bw >> 1) + bw, y0: ly - bh - gap, y1: ly - gap };
@@ -1855,4 +1883,4 @@ export class Office {
 }
 
 // usados por gags.js (as animações de situação)
-export { T, DOOR_X, rect, blob, makeSprite, sprite, cached, makeCanvas, textW, platPal, personColors, dk, lt, hashStr, mulberry32, clamp, FONT_STACK, ST_COLOR };
+export { buildPerson, T, DOOR_X, rect, blob, makeSprite, sprite, cached, makeCanvas, textW, platPal, personColors, dk, lt, hashStr, mulberry32, clamp, FONT_STACK, ST_COLOR };

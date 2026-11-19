@@ -10,19 +10,33 @@
  *  - Tonto: o contexto foi compactado (estrelinhas girando e "quem sou eu?").
  *  - Comemoração: o subagente terminou; pula com os braços para cima e solta confete antes de ir embora.
  *  - Mão levantada: o agente espera a resposta de uma pergunta ao usuário (AskUserQuestion, telegram ask).
+ *  - Pausa (quem fica ocioso): espreguiça na mesa; a caminho do lounge, passa na cafeteira e serve um café;
+ *    em pé, toma golinhos (com vapor) ou fica no celular rindo; dois em pé, lado a lado, batem papo; no
+ *    sofá, tira uma soneca (deita com cobertor se o outro lugar estiver livre) com bolha no nariz e "zz".
+ *  - Bug: todo erro solta um bichinho do monitor, que sai correndo pelo chão.
+ *  - Teclado pegando fogo: muitas ferramentas seguidas em pouco tempo (8 em 40 s).
+ *  - Cochilo no build: a mesma ferramenta rodando há mais de 90 s (build, testes, deploy): cabeça baixa e "zz".
  *
  * Os gatilhos são os campos erroEm, interrompidoEm e compactadoEm do estado (CONTRATO.md) e as mudanças de
  * estado. Nada aqui muda o estado: só a cena. Quem está numa animação tem `a.gag` (quem age) ou `a.reac`
  * (quem reage); `a.preso` segura o alvo na mesa até a animação acabar.
  */
-import { T, DOOR_X, rect, makeSprite, sprite, cached, makeCanvas, textW, Actor, platPal, dk, lt, hashStr, FONT_STACK } from './render.js';
+import { T, DOOR_X, rect, blob, makeSprite, sprite, cached, makeCanvas, textW, Actor, platPal, dk, lt, hashStr, FONT_STACK, buildPerson } from './render.js';
 
-const CD = { chicote: 15000, bronca: 45000, susto: 6000, tonto: 15000 };   // intervalo mínimo entre duas iguais no mesmo agente
+const CD = { chicote: 15000, bronca: 45000, susto: 6000, tonto: 15000, espreguica: 30000 };   // intervalo mínimo entre duas iguais no mesmo agente
 const RECENTE = 30000;                 // evento mais velho que isso (quando o estado chegou atrasado) não anima
 const ARCADE_ESPERA = 1800;            // ms esperando os subagentes antes de ir ao fliperama
 const COM_CHICOTE = new Set(['deepseek', 'alibaba']);
 const PERGUNTA = /^AskUserQuestion$|·ask$/;
-const DUR = { chicote: 2600, bronca: 4200, susto: 2200, tonto: 5000, comemora: 2600, apanha: 3000, levaBronca: 4200 };
+const DUR = { chicote: 2600, bronca: 4200, susto: 2200, tonto: 5000, comemora: 2600, apanha: 3000, levaBronca: 4200, espreguica: 1700 };
+const CAFE_MS = 3200;                  // servindo o café na cafeteira
+const SONECA_SOFA = 6000;              // ms sentado no sofá até cochilar
+const SONECA_EM_PE = 45000;            // ms em pé no lounge até cochilar ali mesmo
+const PAPO = [['E o deploy?', 'Subiu liso'], ['Quem quebrou o build?', 'Não fui eu!'], ['Café tá fraco hoje', 'Reclama com o Chefe'],
+  ['Viu o PR novo?', '2 mil linhas…'], ['Bora almoçar?', 'Só depois do merge'], ['Já leu o README?', 'Tem README?'], ['Sexta tem deploy?', 'Nem pensar']];
+const COBERTOR = ['#8ec1f2', '#f2a38c', '#a9cf7a', '#c9b3f0', '#f2d06b'];
+const FOGO_JANELA = 40000, FOGO_TROCAS = 8, FOGO_MS = 7000;   // ferramentas seguidas que põem fogo no teclado
+const BUILD_LONGO = 90000;             // ms na mesma ferramenta até cochilar na mesa
 const FALAS = {
   chicote: ['Trabalha!', 'Anda logo!', 'É pra ontem!', 'Sem moleza!', 'Bora, bora!'],
   chamando: ['Vem cá!', 'Cadê você?', 'Chega logo!'],
@@ -35,6 +49,9 @@ const FALAS = {
   tonto: ['Quem sou eu?', 'Onde eu tava?', 'Esqueci tudo…'],
   comemora: ['Feito! ✓', 'Missão cumprida!', 'Entregue!'],
   arcade: ['Toma!', 'Combo!', 'Mais uma ficha', 'Pera, tô ganhando'],
+  espreguica: ['Ufa!', 'Aaaah…', 'Pronto!'],
+  cafe: ['Cafezinho…', 'Um expresso', 'Sem açúcar'],
+  celular: ['kkkk', 'kkkkkk', 'rsrs', 'olha isso kkk'],
   estalo: ['CRACK!', 'PLAFT!', 'TCHÁ!'],
 };
 const um = (lista, n) => lista[(n >>> 0) % lista.length];
@@ -59,6 +76,7 @@ export class Diretor {
     this.fila = [];          // agentes que o Chefe ainda vai visitar
     this.parts = [];         // partículas no mundo (confete, faíscas)
     this.textos = [];        // onomatopeias (CRACK!, K.O.!), desenhadas em espaço de tela
+    this.bugs = [];          // bichinhos que fogem do monitor quando dá erro
     this.seq = 1;
   }
 
@@ -77,14 +95,22 @@ export class Diretor {
       const d = a.d;
       const s = a.gs;
       if (!s) {                                     // primeira vez que vê o agente: só guarda a referência
-        a.gs = { erro: d.erroEm || 0, interr: d.interrompidoEm || 0, compact: d.compactadoEm || 0, estado: d.estado };
+        a.gs = { erro: d.erroEm || 0, interr: d.interrompidoEm || 0, compact: d.compactadoEm || 0, estado: d.estado, ferr: d.ferramenta, det: d.detalhe, trocas: [] };
         if (!primeira && novos.has(a)) this.nasceu(a, now);
         continue;
       }
-      if ((d.erroEm || 0) > s.erro) { s.erro = d.erroEm; if (agora - d.erroEm < RECENTE) this.bronca(a, now); }
+      if ((d.erroEm || 0) > s.erro) { s.erro = d.erroEm; if (agora - d.erroEm < RECENTE) { this.soltarBug(a, now); this.bronca(a, now); } }
+      // ritmo: cada ferramenta nova conta; muitas em pouco tempo põem fogo no teclado
+      if (d.ferramenta && (d.ferramenta !== s.ferr || d.detalhe !== s.det)) {
+        s.trocas.push(now);
+        while (s.trocas.length && now - s.trocas[0] > FOGO_JANELA) s.trocas.shift();
+        if (this.on && s.trocas.length >= FOGO_TROCAS && !(a.fogoAte > now)) { a.fogoAte = now + FOGO_MS; s.trocas.length = 0; }
+      }
+      s.ferr = d.ferramenta; s.det = d.detalhe;
       if ((d.interrompidoEm || 0) > s.interr) { s.interr = d.interrompidoEm; if (agora - d.interrompidoEm < RECENTE) this.reagir(a, 'susto', now); }
       if ((d.compactadoEm || 0) > s.compact) { s.compact = d.compactadoEm; if (agora - d.compactadoEm < RECENTE) this.reagir(a, 'tonto', now); }
       if (d.estado === 'saindo' && s.estado !== 'saindo' && d.papel === 'subagente' && !a.gag) this.reagir(a, 'comemora', now);
+      if (d.estado === 'ocioso' && (s.estado === 'trabalhando' || s.estado === 'pensando') && d.papel === 'principal' && !a.gag && !a.reac) this.reagir(a, 'espreguica', now);
       s.estado = d.estado;
     }
   }
@@ -226,6 +252,126 @@ export class Diretor {
     if (!a.arcT) a.arcT = now;
     return now - a.arcT > ARCADE_ESPERA;
   }
+  // ---------- pausa ----------
+  // a caminho do lounge: decide o que fazer (café ou celular) e, se for café, passa antes na cafeteira
+  pausa(a, now, want) {
+    if (a.d.estado !== 'ocioso') { a.atividade = null; a.cafeFeito = false; }
+    if (want !== 'lounge' || !this.on || a.npc || a.kind === 'lounge') return want;
+    if (!a.atividade) { a.pausas = (a.pausas || 0) + 1; a.atividade = hashStr(a.id + ':' + a.pausas) % 10 < 6 ? 'cafe' : 'celular'; }
+    if (a.atividade !== 'cafe' || a.cafeFeito) return want;
+    if (a.kind === 'cafe' && a.arrived && now - a.arrivedAt > CAFE_MS) { a.cafeFeito = true; return want; }
+    return 'cafe';
+  }
+  lugarCafe(a) {
+    const lx = this.of.world.lx;
+    return { gx: lx + 1, gy: 1, px: lx + 1.5 + ((hashStr(a.id) % 3) - 1) * 0.15, py: 1.55 };
+  }
+  dormindo(a, now) {
+    if (this.buildLongo(a, now)) return true;
+    if (!a.arrived || a.kind !== 'lounge' || !a.spot || a.parceiro || a.gag) return false;
+    const t = now - a.arrivedAt;
+    return a.spot.seat ? t > SONECA_SOFA : t > SONECA_EM_PE;
+  }
+  // dois em pé, perto um do outro, no lounge: viram dupla de papo
+  parear(now) {
+    const of = this.of, livres = [];
+    for (const a of of.actors.values()) {
+      if (this.on && a.arrived && a.kind === 'lounge' && a.spot && !a.spot.seat && !a.gag && !this.reac(a, now) && now - a.arrivedAt < SONECA_EM_PE) livres.push(a);
+    }
+    const ok = new Set(livres.map((a) => a.id));
+    for (const a of of.actors.values()) if (a.parceiro && (!ok.has(a.id) || !ok.has(a.parceiro))) a.parceiro = null;
+    for (const a of livres) {
+      if (a.parceiro) continue;
+      let best = null, bd = 2.6;
+      for (const b of livres) {
+        if (b === a || b.parceiro) continue;
+        const dd = Math.hypot(a.x - b.x, a.y - b.y);
+        if (dd < bd) { bd = dd; best = b; }
+      }
+      if (best) { a.parceiro = best.id; best.parceiro = a.id; }
+    }
+  }
+  cafeteira(g, it, now) {
+    let servindo = false;
+    for (const a of this.of.actors.values()) if (a.kind === 'cafe' && a.arrived) { servindo = true; break; }
+    if (!servindo) return;
+    const p = ((now / 120) | 0) & 1;
+    rect(g, it.x - (p ? 1 : 0), it.y - 14, 1, 4, '#5a3418');                   // café caindo na caneca
+    if (((now / 250) | 0) & 1) rect(g, it.x - 4, it.y - 25, 3, 2, '#ffcf5a');  // luz de "servindo"
+  }
+  // soneca deitado no sofá: a pessoa de frente, girada 90° (cabeça na almofada da esquerda), e o cobertor
+  deitado(g, a, now) {
+    const x0 = a.spot.sofa * T;
+    let s = a.sprs.deitado;
+    if (!s) {
+      const p = buildPerson(a, { pose: 'stand', dir: 0, frame: 0, bob: 0, blink: 1, cup: false, semSombra: true });
+      const [c, cg] = makeCanvas(42, 32);
+      cg.translate(0, 32); cg.rotate(-Math.PI / 2); cg.drawImage(p, 0, 0);
+      s = a.sprs.deitado = c;
+    }
+    g.drawImage(s, x0 - 7, -7);
+    const resp = (((now + a.phase) / 1300) | 0) & 1, cor = COBERTOR[hashStr(a.id) % COBERTOR.length];
+    rect(g, x0 + 18, 3 + resp, 14, 12 - resp, cor); rect(g, x0 + 18, 3 + resp, 14, 1, lt(cor, 0.45)); rect(g, x0 + 18, 3 + resp, 2, 12 - resp, lt(cor, 0.2));
+    for (let x = 22; x < 31; x += 4) rect(g, x0 + x, 4 + resp, 1, 10 - resp, dk(cor, 0.14));
+    rect(g, x0 + 18, 14, 14, 1, dk(cor, 0.3));
+    a.ovx = x0 + 9; a.ovy = 2;                     // nome e "zz" em cima da cabeça
+  }
+  bolhaNariz(g, a, fx, fy, now) {
+    const ph = ((now + a.phase * 3) % 2800) / 2800, r = Math.round(1 + ph * 3);
+    let cx, cy;
+    if (a.deitado) { cx = a.spot.sofa * T + 14; cy = 5 - r; } else { cx = fx + 1 + r; cy = fy - 15; }
+    if (ph < 0.92) {
+      blob(g, cx, cy, r, r, 'rgba(170,220,255,0.7)');
+      rect(g, cx - r + 1, cy - r + 1, 1, 1, '#ffffff');
+    } else for (const [dx, dy] of [[-3, -2], [3, -2], [-2, 2], [2, 2], [0, -4]]) rect(g, cx + dx, cy + dy, 1, 1, 'rgba(170,220,255,0.8)');
+  }
+  vaporCaneca(g, fx, fy, now) {
+    for (let i = 0; i < 2; i++) {
+      const p = (now / 1300 + i / 2) % 1;
+      g.globalAlpha = (1 - p) * 0.7;
+      rect(g, fx + 6 + Math.round(Math.sin(p * 6 + i * 2)), fy - 14 - Math.round(p * 7), 1, 1, '#ffffff');
+    }
+    g.globalAlpha = 1;
+  }
+  celular(g, fx, fy, now) {
+    rect(g, fx - 1, fy - 11, 3, 4, '#1b2133'); rect(g, fx - 1, fy - 11, 3, 1, '#3a4259');
+    rect(g, fx, fy - 10, 1, 2, ((now / 450) | 0) % 3 ? '#8ef0ff' : '#d8fbff');
+    g.globalAlpha = 0.13; rect(g, fx - 3, fy - 18, 6, 5, '#8ef0ff'); g.globalAlpha = 1;   // a tela ilumina o rosto
+  }
+  // ---------- bug, fogo no teclado, cochilo no build ----------
+  soltarBug(a, now) {
+    if (!this.on || this.bugs.length > 8) return;
+    const s = a.kind === 'desk' ? this.of.seatTile(a) : null;
+    const x = s ? s.cx * T + 4 : a.fx, y = s ? s.base - 4 : a.fy - 4, dir = Math.random() < 0.5 ? -1 : 1;
+    this.bugs.push({ x, y, vx: dir * (26 + Math.random() * 14), vy: 10 + Math.random() * 14, t0: now, vida: 4.5, fase: Math.random() * 6 });
+    this.texto(x, y - 6, 'bug!', now, 700);
+  }
+  pegandoFogo(a, now) { return this.on && a.fogoAte > now && a.arrived && a.kind === 'desk' && a.d.estado === 'trabalhando'; }
+  buildLongo(a, now) {
+    const d = a.d;
+    return this.on && a.arrived && a.kind === 'desk' && d.estado === 'trabalhando' && !!d.ferramenta && !!d.desde && Date.now() - d.desde > BUILD_LONGO;
+  }
+  fogo(g, a, now) {
+    const s = this.of.seatTile(a);
+    if (!s) return;
+    const x0 = s.cx * T + 9, y0 = s.base + 1;            // teclado da mesa
+    for (let i = 0; i < 5; i++) {
+      const h = 3 + ((hashStr('f' + i + ':' + ((now / 90) | 0)) % 5));
+      const x = x0 + 1 + i * 3;
+      rect(g, x, y0 - h, 2, h, '#ff5a1f'); rect(g, x, y0 - h + 1, 2, Math.max(1, h - 3), '#ffb020'); rect(g, x, y0 - 1, 2, 1, '#fff0a0');
+    }
+    if (Math.random() < 0.15) this.parts.push({ x: x0 + 2 + Math.random() * 12, y: y0 - 6, vx: (Math.random() - 0.5) * 6, vy: -14 - Math.random() * 8, gr: 0, vida: 0.9, cor: 'rgba(120,120,130,0.6)', w: 2, h: 2 });
+  }
+  drawBugs(g, now) {
+    for (const b of this.bugs) {
+      const x = Math.round(b.x), y = Math.round(b.y), p = ((now / 70) | 0) & 1;
+      g.globalAlpha = Math.min(1, b.vida * 2);
+      rect(g, x - 1, y, 4, 2, '#2a2433'); rect(g, x, y - 1, 2, 1, '#3d3550');
+      rect(g, b.vx > 0 ? x + 3 : x - 2, y, 1, 1, '#e5484d');                      // cabeça vermelha
+      for (const lx of [x - 1, x + 1]) { rect(g, lx + p, y - 1 + (p ? 0 : 3), 1, 1, '#2a2433'); rect(g, lx + 1 - p, y + 2, 1, 1, '#2a2433'); }
+    }
+    g.globalAlpha = 1;
+  }
   temFilhoAtivo(a) {
     for (const c of this.of.actors.values()) {
       if (c.d.paiId === a.id && c.d.papel === 'subagente' && !c.leaving && c.d.estado !== 'saindo' && c.d.estado !== 'ocioso') return true;
@@ -260,6 +406,18 @@ export class Diretor {
       of.mover(n, dt, now);
       if (n.gone) this.npcs.delete(n.id);
     }
+    if (this.on) {
+      for (const a of of.actors.values()) {   // quem cochila no sofá deita se o outro lugar estiver livre
+        if (a.deitado || !a.spot || !a.spot.seat || !this.dormindo(a, now)) continue;
+        const viz = of.world.spots.find((sp) => sp.seat && sp.sofa === a.spot.sofa && sp !== a.spot);
+        if (viz && !viz.owner) { viz.owner = a.id; a.deitado = viz; }
+      }
+      if (now - (this._papoT || 0) > 700) { this._papoT = now; this.parear(now); }
+    }
+    for (const b of this.bugs) {             // o bug corre em zigue-zague e some
+      b.fase += dt * 9; b.x += b.vx * dt; b.y += (b.vy + Math.sin(b.fase) * 30) * dt; b.vida -= dt;
+    }
+    if (this.bugs.length) this.bugs = this.bugs.filter((b) => b.vida > 0);
     let k = 0;
     for (const p of this.parts) {
       p.vy += p.gr * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vida -= dt;
@@ -283,9 +441,10 @@ export class Diretor {
       return { pidx: 0, dir: 2 };                   // na fila, assistindo
     }
     const r = this.reac(a, now);
-    if (!r) return null;
+    if (!r) return this.posePausa(a, now);
     const t = now - r.t0;
     switch (r.tipo) {
+      case 'espreguica': return { pidx: 6, dir: 0, semMaos: true, olhosFechados: t > 300 && t < 1300 };
       case 'comemora': return { pidx: 6, dir: 0, oy: -Math.round(Math.abs(Math.sin(t / 300 * Math.PI)) * 4), semMaos: true };
       case 'susto': { const k = t < 520 ? Math.round(Math.sin(t / 520 * Math.PI) * 5) : 0; return { oy: -k, semMaos: k > 0 }; }
       case 'apanha': { const j = a.jolt && now - a.jolt < 180; return { oy: j ? -3 : 0, ox: j ? 1 : 0, semMaos: j }; }
@@ -293,6 +452,25 @@ export class Diretor {
       case 'tonto': return { ox: Math.round(Math.sin(now / 280) * 1.4) };
       default: return null;
     }
+  }
+  posePausa(a, now) {
+    if (!this.on) return null;
+    if (this.buildLongo(a, now)) return { olhosFechados: true, oy: 2 + ((((now + a.phase) / 1500) | 0) & 1), semMaos: true };
+    if (a.kind === 'cafe' && a.arrived) return { pidx: 0, dir: 2 };                          // de costas, servindo
+    if (!a.arrived && a.kind === 'lounge' && a.atividade === 'cafe' && a.cafeFeito) return { cup: 1 };   // andando com a caneca
+    if (!a.arrived || a.kind !== 'lounge' || !a.spot) return null;
+    const dorme = this.dormindo(a, now);
+    if (a.spot.seat) {
+      if (!dorme) return null;
+      if (a.deitado) return { deitado: true };
+      return { olhosFechados: true, oy: (((now + a.phase) / 1400) | 0) & 1 };               // cochila sentado, cabeceando
+    }
+    const cafe = a.atividade !== 'celular' ? 1 : 0;
+    if (dorme) return { olhosFechados: true, cup: cafe };
+    const par = a.parceiro && this.of.actors.get(a.parceiro);
+    if (par) return { pidx: 0, dir: par.x >= a.x ? 1 : 3, cup: cafe };                       // de frente para quem conversa
+    if (!cafe) return { cup: 0 };
+    return { cup: 1, frame: (now + a.phase * 5) % 5200 < 900 ? 1 : 0 };                       // golinho a cada ~5 s
   }
   // fala de uma animação: { head, det, estilo }
   fala(a, now) {
@@ -320,8 +498,21 @@ export class Diretor {
         case 'susto': return { head: um(FALAS.susto, r.n) };
         case 'tonto': return { head: um(FALAS.tonto, r.n) };
         case 'comemora': return { head: um(FALAS.comemora, r.n) };
+        case 'espreguica': return t > 400 ? { head: um(FALAS.espreguica, r.n) } : null;
         default: return null;
       }
+    }
+    if (this.on && a.kind === 'cafe' && a.arrived && now - a.arrivedAt < 1800) return { head: um(FALAS.cafe, hashStr(a.id) + (a.pausas || 0)) };
+    if (this.on && a.arrived && a.kind === 'lounge' && a.spot && !a.spot.seat && !this.dormindo(a, now)) {
+      const par = a.parceiro && this.of.actors.get(a.parceiro);
+      if (par) {
+        const [A, B] = a.id < par.id ? [a, par] : [par, a], seed = hashStr(A.id + B.id) % 9000;
+        const t = (now + seed) % 9000, linhas = um(PAPO, Math.floor((now + seed) / 9000) + seed);
+        if (a === A && t < 2000) return { head: linhas[0] };
+        if (a === B && t > 2200 && t < 4200) return { head: linhas[1] };
+        return null;
+      }
+      if (a.atividade === 'celular' && (now + a.phase * 11) % 9000 < 1300) return { head: um(FALAS.celular, Math.floor((now + a.phase * 11) / 9000)) };
     }
     if (a.arrived && a.kind === 'arcade' && a.spot && a.spot.play) {
       const c = (now + a.phase * 7) / 8000, i = Math.floor(c);
@@ -345,6 +536,13 @@ export class Diretor {
       else if (r.tipo === 'tonto') this.estrelas(g, fx, fy, now);
     }
     if (this.on && a.arrived && a.kind === 'desk' && !G && !r && a.d.estado === 'esperando' && PERGUNTA.test(a.d.ferramenta || '')) this.mao(g, a, fx, fy, now);
+    if (this.pegandoFogo(a, now)) { this.fogo(g, a, now); this.suor(g, fx, fy, now - a.fogoAte); }
+    else if (!G && !r && this.buildLongo(a, now)) this.bolhaNariz(g, a, fx, fy + 1, now);
+    if (this.on && a.arrived && a.kind === 'lounge' && a.spot && !G && !r) {
+      if (this.dormindo(a, now)) this.bolhaNariz(g, a, fx, fy, now);
+      else if (!a.spot.seat && a.atividade === 'celular') this.celular(g, fx, fy, now);
+      else if (!a.spot.seat && !a.parceiro && (now + a.phase * 5) % 5200 >= 900) this.vaporCaneca(g, fx, fy, now);
+    }
   }
   // 0..1 dentro de cada estalo (o golpe acontece em 0,5); -1 fora da cena
   uChicote(G, now) {
@@ -418,6 +616,8 @@ export class Diretor {
     rect(g, x, fy - 26, 2, 2, cl.skin);
   }
   drawParticulas(g) {
+    const now = performance.now();
+    this.drawBugs(g, now);
     for (const p of this.parts) {
       g.globalAlpha = Math.min(1, p.vida * 3);
       rect(g, Math.round(p.x), Math.round(p.y), p.w, p.h, p.cor);
@@ -491,8 +691,11 @@ export class Diretor {
     } else if (tipo === 'bronca') this.bronca(a, now);
     else if (tipo === 'chefe') this.chamarChefe(a, now);
     else if (tipo === 'arcade' || tipo === 'fliperama') a.forcaArcade = now + 15000;
+    else if (tipo === 'bug') this.soltarBug(a, now);
+    else if (tipo === 'fogo') a.fogoAte = now + FOGO_MS;
+    else if (tipo === 'soneca') { if (a.kind !== 'lounge') { this.on = era; return 'a soneca é no lounge: escolha um agente ocioso'; } a.arrivedAt = now - 60000; a.parceiro = null; }
     else if (DUR[tipo]) this.reagir(a, tipo, now);
-    else { this.on = era; return 'tipos: chicote, bronca, chefe, fliperama, susto, tonto, comemora'; }
+    else { this.on = era; return 'tipos: chicote, bronca, chefe, fliperama, susto, tonto, comemora, espreguica, soneca, bug, fogo'; }
     this.on = era;
     return `${tipo}: ${a.d.nome}`;
   }

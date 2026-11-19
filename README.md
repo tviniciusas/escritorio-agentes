@@ -72,11 +72,16 @@ A sala reage ao que acontece com os agentes. Tudo sai das transcrições, sem ho
 | O contexto é compactado | Estrelinhas girando em volta da cabeça e "Quem sou eu?". |
 | Um subagente termina | Levanta com os braços para cima, solta confete e vai embora pelo elevador. |
 | O agente pergunta algo ao usuário (`AskUserQuestion`, `ask` do Telegram) | Levanta a mão acenando: "Ô humano!" e a pergunta no balão. |
+| Uma ferramenta dá erro | Além da bronca, um **bug** sai do monitor e foge correndo pelo chão. |
+| Muitas ferramentas seguidas (8 em 40 s) | O teclado pega fogo, com fumaça, e o agente sua. |
+| A mesma ferramenta rodando há mais de 90 s (build, testes, deploy) | Cochila na mesa: cabeça baixa, olhos fechados, bolha no nariz. |
+| O agente termina a vez | Espreguiça na mesa ("Ufa!") antes de ir para a pausa. |
+| Pausa (ocioso) | No caminho do lounge, passa na cafeteira e serve um café. Em pé, toma golinhos (com vapor na caneca) ou fica no celular rindo ("kkkk"). Dois em pé, um perto do outro, batem papo ("E o deploy?" / "Subiu liso"). No sofá, tira uma soneca com "zz" e bolha no nariz; se o sofá estiver vazio, deita nos dois lugares, com cobertor. |
 
 Cada animação tem um intervalo mínimo por agente (a bronca, por exemplo, no máximo uma a cada 45 s), para a sala não virar bagunça numa sessão que erra muito. Para ver uma na hora, abra o console do navegador:
 
 ```js
-__escritorio.office.testar('chicote')   // ou: bronca, chefe, fliperama, susto, tonto, comemora
+__escritorio.office.testar('chicote')   // ou: bronca, chefe, fliperama, susto, tonto, comemora, espreguica, soneca, bug, fogo
 ```
 
 Sem argumento, ele escolhe o agente selecionado (ou um qualquer). O [`?demo=1`](http://127.0.0.1:5210/?demo=1) dispara todas de tempos em tempos.
@@ -205,7 +210,7 @@ POST /api/agente ─────────────────────
 | [`fontes/outras.js`](fontes/outras.js) | Codex e Gemini. |
 | [`fontes/historico.js`](fontes/historico.js) | Leitura incremental do histórico completo de um agente. |
 | [`public/render.js`](public/render.js) | A cena: tiles, zonas, móveis, pessoas, caminhos (BFS), nomes e balões. |
-| [`public/gags.js`](public/gags.js) | As animações: fliperama, chicote, bronca e o Chefe, susto, tonto, comemoração e mão levantada. |
+| [`public/gags.js`](public/gags.js) | As animações: fliperama, chicote, bronca e o Chefe, bug, fogo no teclado, susto, tonto, comemoração, mão levantada e a pausa (café, celular, papo e soneca). |
 | [`public/app.js`](public/app.js) | Lista, filtros, zoom, seleção e a ligação com o SSE. |
 | [`public/detalhe.js`](public/detalhe.js) | O painel de detalhe (Agora, Histórico, Ferramentas, Contexto). |
 | [`public/demo.js`](public/demo.js) | Os agentes de mentira do `?demo=1`. |
