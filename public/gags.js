@@ -69,7 +69,7 @@ function vestirChefe(cl) {
   const hair = '#cfc8b8', pants = '#2e3446', shoe = '#1e1a22';
   Object.assign(cl, {
     hair, hairS: dk(hair, 0.25), hairH: lt(hair, 0.4), hairO: dk(hair, 0.72), style: 2,
-    pants, pantsS: dk(pants, 0.3), pantsO: dk(pants, 0.66), shoe, shoeO: dk(shoe, 0.7),
+    pants, pantsS: dk(pants, 0.3), pantsO: dk(pants, 0.66), shoe, shoeH: lt(shoe, 0.3), shoeD: dk(shoe, 0.3), shoeO: dk(shoe, 0.7),
     glasses: true, beard: false, badge: false, stripe: false, outfit: 1, tie: '#d93a3a', bigode: true, bravo: true,
   });
 }

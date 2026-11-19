@@ -5,7 +5,6 @@
 import { U, rh, rect, blob, softShadow, makeSprite, sprite, putS, mulberry32, hashStr, dk, lt } from './pixel.js';
 
 export const OL = 0.58;            // quanto o contorno escurece a cor vizinha
-const SOMBRA = 'rgba(50,42,72,0.22)';
 
 // cria (ou pega do cache) um sprite; o desenho recebe R(x, y, w, h, cor) em coordenadas da âncora
 function spr(key, x0, y0, x1, y1, fn, ol = OL) {

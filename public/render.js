@@ -416,7 +416,7 @@ export class Office {
   // ---------- layout do mundo ----------
   // tamanho do mapa (em tiles) para um certo número de colunas de zonas
   layoutDims(zl, zc) {
-    const n = zl.length, zW = 3 * COLS + 1;       // mesas de 2 tiles com 1 de corredor entre elas e nas pontas
+    const n = zl.length, zW = 3 * COLS + 1;       // bancada de COLS postos de 3 tiles, com meio tile de tapete em cada ponta
     if (!n) return { X: HALL_MIN_W, Y: HALL_D + 3, rowDs: [], totalW: 0, zr: 0 };
     const zr = Math.ceil(n / zc), rowDs = [];
     for (let r = 0; r < zr; r++) { let m = 0; for (let c = 0; c < zc; c++) { const z = zl[r * zc + c]; if (z) m = Math.max(m, TOPM + 3 * z.rows); } rowDs.push(m); }
@@ -461,7 +461,7 @@ export class Office {
     const blk = (x, y) => { if (x >= 0 && y >= 0 && x < X && y < Y) w.blocked[y * X + x] = 1; };
     const add = (t, spr, x, y, key, extra) => w.statics.push(Object.assign({ t, spr, x, y, key }, extra));
 
-    // zonas: mesas (a pessoa senta atrás; cada posto tem a sua variação), cadeiras, plantas e o nome da área
+    // zonas: bancadas (a pessoa senta na frente, de costas; cada posto tem a sua variação), cadeiras, plantas e o nome da área
     for (const z of zl) {
       const tiles = [];
       for (let s = 0; s < z.rows * COLS; s++) {
@@ -470,6 +470,7 @@ export class Office {
         const gx0 = z.x0 + 1 + 3 * c, cy = z.y0 + TOPM + 3 * r, base = cy * T, fy = base + SEAT_DY;
         tiles.push({ cx: gx0, cy, px: gx0 + 1, py: fy / T, base });
         for (let dx = -1; dx <= 2; dx++) blk(gx0 + dx, cy);          // a bancada ocupa a fileira inteira da zona
+        blk(gx0, cy + 1); blk(gx0 + 1, cy + 1);                       // a cadeira: quem passa vai pela fileira de baixo
         add(T_DESK, sprDesk(z.pal, hashStr(z.id + ':' + s)), gx0 * T, base, base + 16, { pid: z.id, idx: s, pal: z.pal, cx: gx0 * T + 16, base });
         add(T_CSEAT, sprChairSeat(z.pal), (gx0 + 1) * T, fy, fy - 1, { pid: z.id, idx: s });
         add(T_CBACK, sprChairBack(z.pal), (gx0 + 1) * T, fy, fy + 1, { pid: z.id, idx: s });
@@ -875,7 +876,7 @@ export class Office {
       sx = Math.round(this.tx * f); sy = Math.round(this.ty * f);
     }
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.imageSmoothingEnabled = k < HD;
+    g.imageSmoothingEnabled = k < HD; g.imageSmoothingQuality = 'low';
     g.fillStyle = this.bg; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
     g.setTransform(ks, 0, 0, ks, sx, sy);
     put(g, this.base, -w.baseAx, -w.baseAy);
