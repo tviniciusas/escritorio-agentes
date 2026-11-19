@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>Escritório dos agentes</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Crect width='8' height='8' fill='%23161b24'/%3E%3Crect x='2' y='1' width='4' height='2' fill='%23d97757'/%3E%3Crect x='2' y='3' width='4' height='3' fill='%23f2c9a0'/%3E%3Crect x='3' y='4' width='1' height='1' fill='%231b1d27'/%3E%3Crect x='5' y='4' width='1' height='1' fill='%231b1d27'/%3E%3Crect x='1' y='6' width='6' height='2' fill='%234f9cf9'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app" id="app" data-painel="aberto">
+    <header class="topo">
+      <div class="topo-id">
+        <h1>Escritório dos agentes</h1>
+        <span class="status" id="status" data-estado="conectando" role="status">
+          <span class="ponto" aria-hidden="true"></span><span id="status-txt">conectando</span>
+        </span>
+      </div>
+      <ul class="contagens" id="contagens" aria-label="Agentes por estado">
+        <li class="cont" data-e="trabalhando"><span class="bolinha" aria-hidden="true"></span><b id="c-trabalhando">0</b> trabalhando</li>
+        <li class="cont" data-e="pensando"><span class="bolinha" aria-hidden="true"></span><b id="c-pensando">0</b> pensando</li>
+        <li class="cont" data-e="esperando" id="cont-esperando" hidden><span class="bolinha" aria-hidden="true"></span><b id="c-esperando">0</b> esperando</li>
+        <li class="cont" data-e="ocioso"><span class="bolinha" aria-hidden="true"></span><b id="c-ocioso">0</b> ociosos</li>
+      </ul>
+      <button type="button" class="btn" id="btn-painel" aria-controls="painel" aria-expanded="true">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h12v2H2z" fill="currentColor"/></svg>
+        <span>Agentes</span>
+      </button>
+    </header>
+
+    <main class="palco">
+      <section class="cena-wrap" id="cena-wrap">
+        <canvas id="cena" role="img" aria-label="Escritório isométrico em pixel art com os agentes de IA trabalhando"></canvas>
+        <div class="vazio" id="vazio" hidden>
+          <div class="vazio-card">
+            <strong>Nenhum agente trabalhando agora</strong>
+            <span>Quando uma sessão abrir, o agente chega pelo elevador.</span>
+          </div>
+        </div>
+        <div class="controles" aria-label="Controles da câmera">
+          <button type="button" id="z-mais" aria-label="Aproximar" title="Aproximar"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M7 2h2v5h5v2H9v5H7V9H2V7h5z" fill="currentColor"/></svg></button>
+          <button type="button" id="z-menos" aria-label="Afastar" title="Afastar"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 7h12v2H2z" fill="currentColor"/></svg></button>
+          <button type="button" id="z-reset" aria-label="Recentralizar a vista" title="Recentralizar"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 2h5v2H4v3H2zM9 2h5v5h-2V4H9zM2 9h2v3h3v2H2zM12 9h2v5H9v-2h3z" fill="currentColor"/></svg></button>
+        </div>
+        <div class="dica" id="dica" role="tooltip" hidden></div>
+      </section>
+
+      <aside class="painel" id="painel" aria-label="Lista de agentes">
+        <button type="button" class="painel-topo" id="alca" aria-controls="lista" aria-expanded="true">
+          <span class="grab" aria-hidden="true"></span>
+          <span class="painel-titulo">Agentes <b id="painel-total">0</b></span>
+          <svg class="seta" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <div class="filtros" id="filtros" role="group" aria-label="Filtrar por plataforma"></div>
+        <div class="lista" id="lista"></div>
+      </aside>
+
+      <!-- detalhe de um agente: gaveta à direita no desktop, tela cheia no celular (o conteúdo é montado por detalhe.js) -->
+      <aside class="detalhe" id="detalhe" role="dialog" aria-label="Detalhe do agente" hidden></aside>
+    </main>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
