@@ -57,6 +57,29 @@ Clicando num agente (na sala ou na lista) abre o painel com tudo o que está na 
 | Abrir o detalhe | clique no agente; o endereço vira `#agente=<id>` e dá para compartilhar o link |
 | Fechar o detalhe e tirar a seleção | `Esc` |
 | Esconder uma plataforma | clique no chip dela na lista |
+| Ligar ou desligar as animações | botão `★` (a escolha fica guardada no navegador) |
+
+### Animações
+
+A sala reage ao que acontece com os agentes. Tudo sai das transcrições, sem hook nenhum.
+
+| Quando | O que acontece |
+|---|---|
+| Um agente principal só está esperando os subagentes (ferramenta `Agent`/`Task`, ou terminou a vez com subagentes ainda trabalhando) | Vai ao saguão jogar luta num dos dois fliperamas ao lado do elevador. Com os dois ocupados, o próximo fica atrás, assistindo. Volta para a mesa quando volta a trabalhar. |
+| Um agente abre um subagente ou chama o DeepSeek ou a Alibaba | Vai até a mesa do novato, espera ele sentar e estala o chicote três vezes (`CRACK!`). O novato pula a cada estalo e responde "Sim, senhor!". |
+| Uma ferramenta dá erro | Quem chamou o agente que errou vem reclamar, de punho erguido e veia saltando, e o agente pede desculpa. Agente principal não tem chefe na sala, então o **Chefe** (terno, gravata vermelha e bigode) sobe pelo elevador, dá a bronca e vai embora. |
+| O usuário interrompe ou recusa uma ferramenta | Susto: pulo na cadeira, gota de suor e "Ué?!". |
+| O contexto é compactado | Estrelinhas girando em volta da cabeça e "Quem sou eu?". |
+| Um subagente termina | Levanta com os braços para cima, solta confete e vai embora pelo elevador. |
+| O agente pergunta algo ao usuário (`AskUserQuestion`, `ask` do Telegram) | Levanta a mão acenando: "Ô humano!" e a pergunta no balão. |
+
+Cada animação tem um intervalo mínimo por agente (a bronca, por exemplo, no máximo uma a cada 45 s), para a sala não virar bagunça numa sessão que erra muito. Para ver uma na hora, abra o console do navegador:
+
+```js
+__escritorio.office.testar('chicote')   // ou: bronca, chefe, fliperama, susto, tonto, comemora
+```
+
+Sem argumento, ele escolhe o agente selecionado (ou um qualquer). O [`?demo=1`](http://127.0.0.1:5210/?demo=1) dispara todas de tempos em tempos.
 
 ## O que ele enxerga
 
@@ -83,7 +106,7 @@ curl -s -X POST http://127.0.0.1:5210/api/agente -H "Content-Type: application/j
   -d '{"id":"bot:1","plataforma":"outro","nome":"Meu bot","estado":"trabalhando","ferramenta":"busca","detalhe":"previsão do tempo"}'
 ```
 
-Mande também o `modelo` (`"glm"`, `"mimo"`, `"llama-4"`…) e ele aparece no painel de detalhe.
+Mande também o `modelo` (`"glm"`, `"mimo"`, `"llama-4"`…) e ele aparece no painel de detalhe. Com `"erro": true` (ou `"erro": "nome da ferramenta"`), o Chefe sobe para dar bronca no seu bot.
 
 **Node**
 
@@ -182,6 +205,7 @@ POST /api/agente ─────────────────────
 | [`fontes/outras.js`](fontes/outras.js) | Codex e Gemini. |
 | [`fontes/historico.js`](fontes/historico.js) | Leitura incremental do histórico completo de um agente. |
 | [`public/render.js`](public/render.js) | A cena: tiles, zonas, móveis, pessoas, caminhos (BFS), nomes e balões. |
+| [`public/gags.js`](public/gags.js) | As animações: fliperama, chicote, bronca e o Chefe, susto, tonto, comemoração e mão levantada. |
 | [`public/app.js`](public/app.js) | Lista, filtros, zoom, seleção e a ligação com o SSE. |
 | [`public/detalhe.js`](public/detalhe.js) | O painel de detalhe (Agora, Histórico, Ferramentas, Contexto). |
 | [`public/demo.js`](public/demo.js) | Os agentes de mentira do `?demo=1`. |

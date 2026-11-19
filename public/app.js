@@ -33,6 +33,15 @@ function aplicarTema() {
 aplicarTema();
 window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', aplicarTema);
 office.setHidden(ocultas);
+// animações de situação (gags.js): ligadas por padrão; o botão de estrela desliga e a escolha fica guardada
+let gagsLigadas = carregar('gags', true) !== false;
+function aplicarGags() {
+  office.setGags(gagsLigadas);
+  const b = $('gags');
+  if (b) { b.setAttribute('aria-pressed', String(gagsLigadas)); b.title = gagsLigadas ? 'Animações ligadas' : 'Animações desligadas'; }
+}
+aplicarGags();
+$('gags')?.addEventListener('click', () => { gagsLigadas = !gagsLigadas; guardar('gags', gagsLigadas); aplicarGags(); });
 office.start();
 
 office.onHover = (dado, x, y) => { hoverDado = dado; mostrarDica(dado, x, y); };

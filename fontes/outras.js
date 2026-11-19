@@ -184,6 +184,11 @@ export function criarFonteExterna() {
         desde: antigo && antigo.estado === dados.estado ? antigo.desde : agora,
         ultimaAtividade: agora,
         iniciadoEm: antigo?.iniciadoEm || agora,
+        // "erro": true (ou o nome da ferramenta que falhou) faz o chefe vir reclamar na sala
+        erroEm: dados.erro ? agora : antigo?.erroEm ?? null,
+        erroFerramenta: dados.erro ? curto(typeof dados.erro === 'string' ? dados.erro : dados.ferramenta, 30) : antigo?.erroFerramenta ?? null,
+        interrompidoEm: null,
+        compactadoEm: null,
       });
     },
     ler() {

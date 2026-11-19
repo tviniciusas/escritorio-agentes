@@ -1,7 +1,9 @@
 /* demo.js — estado falso que muda sozinho (use ?demo=1).
  * Serve para testar a cena sem servidor: ~9 agentes em várias plataformas,
  * estados que alternam, ferramentas com detalhes, subagente, chamados,
- * agentes que entram, saem (estado "saindo") e somem.
+ * agentes que entram, saem (estado "saindo") e somem. Também dispara as animações de situação:
+ * o root espera os subagentes (fliperama), erros de ferramenta (bronca), interrupção, compactação
+ * e pergunta ao usuário.
  */
 
 const PLATAFORMAS = [
@@ -50,6 +52,7 @@ export function iniciarDemo(aoMudar) {
       id: o.id, plataforma: o.plataforma, nome: o.nome, titulo: o.titulo ?? null, projeto: o.projeto ?? null,
       papel: o.papel || 'principal', paiId: o.paiId ?? null, estado: 'ocioso', ferramenta: null, detalhe: null,
       modelo: o.modelo ?? null, desde: agora, ultimaAtividade: agora, iniciadoEm: agora,
+      erroEm: null, erroFerramenta: null, interrompidoEm: null, compactadoEm: null,
     };
     agentes.set(a.id, a);
     definirEstado(a, o.estado || 'trabalhando', o.duracao);
@@ -62,12 +65,18 @@ export function iniciarDemo(aoMudar) {
   function definirEstado(a, estado, duracao) {
     const agora = Date.now();
     a.estado = estado; a.desde = agora; a.ultimaAtividade = agora;
+    let espera = 0;
     if (estado === 'trabalhando') {
       const [f, d] = pick(FERRAMENTAS[a.plataforma] || FERRAMENTAS.outro);
       a.ferramenta = f; a.detalhe = d;
+    } else if (estado === 'esperando' && a.plataforma === 'claude' && a.papel === 'principal') {
+      // com subagente trabalhando, espera por ele (vai ao fliperama); sem, pergunta ao usuário (levanta a mão)
+      const filho = [...agentes.values()].some((x) => x.paiId === a.id && x.papel === 'subagente' && x.estado !== 'saindo');
+      if (filho) { a.ferramenta = 'Agent'; a.detalhe = 'Revisar o diff do painel'; espera = rnd(12000, 17000); }
+      else { a.ferramenta = 'AskUserQuestion'; a.detalhe = 'Posso abrir o PR agora?'; }
     } else { a.ferramenta = null; a.detalhe = null; }
-    const dur = duracao ?? ({ trabalhando: rnd(3000, 7000), pensando: rnd(2500, 5000), esperando: rnd(3500, 6500), ocioso: rnd(11000, 20000) }[estado] || 3000);
-    prox.set(a.id, agora + dur);
+    const dur = duracao ?? (espera || { trabalhando: rnd(3000, 7000), pensando: rnd(2500, 5000), esperando: rnd(3500, 6500), ocioso: rnd(11000, 20000) }[estado] || 3000);
+    prox.set(a.id, agora + (dur || 3000));
   }
 
   // próximo estado de um agente "normal" (principal ou subagente)
@@ -95,6 +104,14 @@ export function iniciarDemo(aoMudar) {
   // ----- eventos de ciclo de vida -----
   let subSeq = 0;
   let cicloDeepseek = 1;
+  const marcar = (campo, filtro, ferramenta) => {   // erro, interrupção ou compactação num agente qualquer que passe no filtro
+    const vivos = [...agentes.values()].filter((x) => x.estado !== 'saindo' && filtro(x));
+    if (!vivos.length) return;
+    const a = pick(vivos);
+    a[campo] = Date.now();
+    if (ferramenta) a.erroFerramenta = ferramenta;
+  };
+  const repetir = (fn, min, max) => { const vez = () => { fn(); agenda.push([Date.now() - t0 + rnd(min, max), vez]); }; return vez; };
   const agenda = [
     // [quando (ms desde o início), função]
     [11000, () => { // entra um subagente que vai trabalhar e sair
@@ -109,6 +126,13 @@ export function iniciarDemo(aoMudar) {
     }],
   ];
   const feitos = new Set();
+  // animações: o root espera os subagentes, erros, interrupção e compactação (depois dos eventos acima: agenda[0] é o subagente)
+  agenda.push(
+    [6000, repetir(() => { const r = agentes.get('claude:root'); if (r && r.estado !== 'saindo') definirEstado(r, 'esperando', 15000); }, 38000, 46000)],
+    [9000, repetir(() => marcar('erroEm', (x) => x.papel !== 'principal' || Math.random() < 0.4, pick(['Bash', 'Edit', 'Read', 'chat'])), 10000, 15000)],
+    [24000, repetir(() => marcar('interrompidoEm', (x) => x.papel === 'principal'), 35000, 50000)],
+    [33000, repetir(() => marcar('compactadoEm', (x) => x.papel === 'principal'), 40000, 55000)],
+  );
 
   // um novo chamado entra alguns segundos depois que o anterior saiu
   function agendarSubstituto(a) {

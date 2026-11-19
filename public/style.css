@@ -134,6 +134,7 @@ h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0.01em; white
 }
 .controles button:hover { border-color: var(--acento); }
 .controles button:active { transform: translateY(1px); }
+.controles button[aria-pressed="false"] { opacity: 0.5; }
 
 .vazio { position: absolute; inset: 0; display: grid; align-items: end; justify-items: center; padding: 0 16px 9%; pointer-events: none; }
 .vazio-card {

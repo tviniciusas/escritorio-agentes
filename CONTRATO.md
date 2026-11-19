@@ -35,7 +35,11 @@ O servidor (`server.js`, Node 22, sem dependências) escuta em `http://127.0.0.1
       "modelo": "claude-opus-5-5",        // pode ser null
       "desde": 1795042407171,             // ms em que entrou no estado atual
       "ultimaAtividade": 1795042407171,   // ms
-      "iniciadoEm": 1795042400000         // ms
+      "iniciadoEm": 1795042400000,        // ms
+      "erroEm": 1795042405000,            // ms da última ferramenta que voltou com erro; null se não houve (a recusa do usuário não conta)
+      "erroFerramenta": "Bash",           // a ferramenta desse erro; pode ser null
+      "interrompidoEm": null,             // ms da última interrupção ([Request interrupted]) ou recusa de ferramenta pelo usuário
+      "compactadoEm": null                // ms da última compactação do contexto (compact_boundary)
     }
   ]
 }
@@ -47,6 +51,7 @@ O servidor (`server.js`, Node 22, sem dependências) escuta em `http://127.0.0.1
 - `ocioso`: terminou a vez e espera o usuário. Some depois de alguns minutos.
 - `saindo`: vai sumir no próximo estado (subagente que terminou). A página pode animar a saída.
 - `papel: "chamado"`: modelo chamado por ferramenta (DeepSeek pelo MCP, imagem na Alibaba). `paiId` aponta quem chamou.
+- `erroEm`, `interrompidoEm` e `compactadoEm` só servem para as animações (`public/gags.js`): a página anima quando o valor aumenta. Saem da cauda da transcrição, então podem voltar a `null` numa sessão longa. Só o Claude Code (e o agente externo, com `"erro"`) preenche; nas outras plataformas vêm `null` ou ausentes.
 
 ## Histórico de um agente
 
@@ -103,4 +108,4 @@ Tipos de evento: `usuario`, `assistente`, `pensamento`, `ferramenta`, `sistema`.
 { "id": "bot:1", "plataforma": "outro", "nome": "GLM", "estado": "trabalhando", "ferramenta": "busca", "detalhe": "previsão do tempo", "projeto": "meu-bot", "modelo": "glm" }
 ```
 
-Só `id` e `estado` são obrigatórios. O servidor completa o resto e tira o agente depois de 2 minutos sem atualização. `"estado": "encerrado"` tira na hora.
+Só `id` e `estado` são obrigatórios. O servidor completa o resto e tira o agente depois de 2 minutos sem atualização. `"estado": "encerrado"` tira na hora. `"erro": true` (ou o nome da ferramenta que falhou) marca `erroEm` com a hora do pedido.

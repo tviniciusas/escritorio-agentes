@@ -32,6 +32,7 @@ export function resumirTranscricao(registros, agora = Date.now()) {
   let ultimoTs = 0;
   let parada = null;
   let modelo = null, cwd = null, titulo = null, tituloFixo = null, inicio = null;
+  let erroEm = null, erroFerramenta = null, interrompidoEm = null, compactadoEm = null;
 
   for (const r of registros) {
     const ts = r.timestamp ? Date.parse(r.timestamp) : 0;
@@ -39,6 +40,7 @@ export function resumirTranscricao(registros, agora = Date.now()) {
     if (r.cwd) cwd = r.cwd;
     if (r.type === 'ai-title' && r.aiTitle) titulo = r.aiTitle;
     if (r.type === 'custom-title' && r.customTitle) tituloFixo = r.customTitle;
+    if (r.type === 'system' && r.subtype === 'compact_boundary') { if (ts) compactadoEm = ts; continue; }
     if (r.type !== 'user' && r.type !== 'assistant') continue;
     const msg = r.message || {};
     const conteudo = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: String(msg.content ?? '') }];
@@ -61,16 +63,20 @@ export function resumirTranscricao(registros, agora = Date.now()) {
         if (b.type === 'tool_result') {
           teveResultado = true;
           const p = pendentes.get(b.tool_use_id);
+          // erro de ferramenta; a recusa do usuário ("doesn't want to proceed") conta como interrupção
+          const recusa = b.is_error && RECUSA.test(textoDoResultado(b));
+          if (recusa) interrompidoEm = ts || interrompidoEm;
+          else if (b.is_error) { erroEm = ts || erroEm; erroFerramenta = p ? nomeDaFerramenta(p.nome) : erroFerramenta; }
           if (p) {
             pendentes.delete(b.tool_use_id);
-            if (String(p.nome).startsWith('mcp__')) terminadas.push({ id: b.tool_use_id, ...p, fim: ts });
+            if (String(p.nome).startsWith('mcp__')) terminadas.push({ id: b.tool_use_id, ...p, fim: ts, erro: !!b.is_error && !recusa });
           }
         }
       }
       if (teveResultado) ultimo = 'resultado';
       else {
         const texto = conteudo.map((b) => b.text || '').join(' ');
-        if (/\[Request interrupted/i.test(texto)) { ultimo = 'interrompido'; pendentes.clear(); }
+        if (/\[Request interrupted/i.test(texto)) { ultimo = 'interrompido'; pendentes.clear(); interrompidoEm = ts || interrompidoEm; }
         else if (!r.isMeta) ultimo = 'usuario';
       }
     }
@@ -99,7 +105,16 @@ export function resumirTranscricao(registros, agora = Date.now()) {
     titulo: tituloFixo || titulo, inicio,
     pendentes: lista.map(([id, p]) => ({ id, ...p })),
     terminadas,
+    erroEm, erroFerramenta, interrompidoEm, compactadoEm,
   };
+}
+
+const RECUSA = /doesn't want to proceed|user (rejected|denied|declined)|tool use was rejected/i;
+function textoDoResultado(b) {
+  const c = b.content;
+  if (typeof c === 'string') return c.slice(0, 400);
+  if (Array.isArray(c)) return c.map((x) => (typeof x?.text === 'string' ? x.text : '')).join(' ').slice(0, 400);
+  return '';
 }
 
 function nomeDaFerramenta(nome) {
@@ -145,6 +160,10 @@ function chamadosDe(resumo, paiId, agora) {
       desde,
       ultimaAtividade: desde,
       iniciadoEm: c.ts || desde,
+      erroEm: c.erro ? c.fim : null,
+      erroFerramenta: c.erro ? m[2] : null,
+      interrompidoEm: null,
+      compactadoEm: null,
     });
   };
   for (const c of resumo.pendentes) add(c, /__ask$/.test(c.nome) ? 'esperando' : 'trabalhando', c.ts || agora);
@@ -214,6 +233,7 @@ export function criarFonteClaude({ raiz = path.join(os.homedir(), '.claude', 'pr
           detalhe: estado === 'saindo' ? null : r.detalhe,
           modelo: r.modelo, desde: r.desde || mtime, ultimaAtividade: mtime,
           iniciadoEm: r.inicio || criado || mtime,
+          erroEm: r.erroEm, erroFerramenta: r.erroFerramenta, interrompidoEm: r.interrompidoEm, compactadoEm: r.compactadoEm,
         });
         agentes.push(...chamadosDe(r, id, agora));
       }

@@ -109,3 +109,43 @@ test('Codex: task_complete = ocioso; environment_context não vira título', () 
   assert.equal(r.estado, 'ocioso');
   assert.equal(r.titulo, 'o pedido de verdade');
 });
+
+// ---- sinais das animações: erro, interrupção e compactação ----
+const voltaErro = (id, s, texto = 'Exit code 1') => ({ type: 'user', timestamp: ts(s), message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: true, content: texto }] } });
+
+test('Claude: erro de ferramenta marca erroEm e o nome da ferramenta', () => {
+  const r = resumirTranscricao([usa('t1', 'Bash', { command: 'npm test' }, 20), voltaErro('t1', 18)], agora);
+  assert.equal(r.erroEm, agora - 18000);
+  assert.equal(r.erroFerramenta, 'Bash');
+  assert.equal(r.interrompidoEm, null);
+  const ok = resumirTranscricao([usa('t1', 'Bash', {}, 20), volta('t1', 18)], agora);
+  assert.equal(ok.erroEm, null);
+});
+
+test('Claude: recusa do usuário e [Request interrupted] contam como interrupção, não como erro', () => {
+  const recusa = resumirTranscricao([usa('t1', 'Edit', {}, 20), voltaErro('t1', 15, "The user doesn't want to proceed with this tool use.")], agora);
+  assert.equal(recusa.erroEm, null);
+  assert.equal(recusa.interrompidoEm, agora - 15000);
+  const parou = resumirTranscricao([usa('t1', 'Bash', {}, 50), usuario('[Request interrupted by user]', 40)], agora);
+  assert.equal(parou.interrompidoEm, agora - 40000);
+});
+
+test('Claude: compact_boundary marca compactadoEm', () => {
+  const r = resumirTranscricao([usuario('oi', 60), { type: 'system', subtype: 'compact_boundary', timestamp: ts(30) }, usuario('continua', 20)], agora);
+  assert.equal(r.compactadoEm, agora - 30000);
+});
+
+test('Claude: chamada MCP que voltou com erro fica marcada', () => {
+  const r = resumirTranscricao([usa('d1', 'mcp__deepseek__chat', {}, 5), voltaErro('d1', 2, 'saldo insuficiente')], agora);
+  assert.equal(r.terminadas[0].erro, true);
+});
+
+test('Externa: "erro" marca erroEm', () => {
+  const f = criarFonteExterna();
+  f.receber({ id: 'bot', estado: 'trabalhando', ferramenta: 'busca' });
+  assert.equal(f.ler()[0].erroEm, null);
+  f.receber({ id: 'bot', estado: 'trabalhando', ferramenta: 'busca', erro: true });
+  const a = f.ler()[0];
+  assert.ok(a.erroEm > 0);
+  assert.equal(a.erroFerramenta, 'busca');
+});

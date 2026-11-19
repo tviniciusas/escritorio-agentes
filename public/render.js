@@ -17,7 +17,10 @@
  *  - Textos (nomes, balões e nomes das áreas) usam a fonte sans do sistema, desenhada em resolução de
  *    tela (depois do scale) e guardada em sprites em cache, então ficam nítidos em qualquer zoom; os
  *    nomes desviam uns dos outros e dos nomes das áreas.
+ *  - Animações de situação (fliperama, chicote, bronca do chefe, susto, comemoração...) ficam em gags.js,
+ *    que esta cena chama em poucos ganchos (think, update, drawActor, overlay).
  */
+import { Diretor } from './gags.js';
 
 // =====================================================================
 // 1. CONSTANTES
@@ -38,7 +41,8 @@ const ZZ_DELAY = 5000;          // ms no lounge até aparecer o "zz"
 const TOPM = 2;                 // faixas de cima da zona: a 1ª fica livre (nome da área), a 2ª é corredor
 const SEAT_DY = 6;              // quanto o quadril de quem senta fica abaixo da borda de cima da mesa
 const HEAD_H = 28;              // altura da pessoa em pé (do pé ao topo do cabelo), px lógicos
-const T_SPR = 0, T_DESK = 1, T_CBACK = 3, T_ACTOR = 4, T_COFFEE = 5, T_PLANT = 6;
+const T_SPR = 0, T_DESK = 1, T_CBACK = 3, T_ACTOR = 4, T_COFFEE = 5, T_PLANT = 6, T_ARCADE = 7;
+const ARCADE_TX = [4, 5];        // tiles do saguão (fileira 0) com os fliperamas, entre o elevador e as janelas
 
 // piso de tijolinho, carpete xadrez, parede e madeira clara
 const BRICKS = ['#f8f0de', '#f5ecd6', '#f7eedb', '#f2e8d0'], MORTAR = '#e7dbbf', BRICK_HI = 'rgba(255,254,246,0.5)';
@@ -47,7 +51,7 @@ const WALL_BACK = '#d0d8f0', WALL_LOW = '#bfc9e8', WALL_BASE = '#93a0c9', WALL_C
 const WOOD = ['#f8e6bd', '#ecd3a2', '#dcbd84', '#c39f68', '#a48050'];     // madeira clara: luz, base, veio, frente, sombra
 const LILAC = ['#9aa2e4', '#8b93d9', '#b3b9ee'];                            // piso do lounge: escuro, médio, claro
 // cores de estado (as mesmas da página, tema escuro)
-const ST_COLOR = { trabalhando: '#4ade80', pensando: '#a78bfa', esperando: '#fbbf24', ocioso: '#8b95a8', saindo: '#f87171' };
+const ST_COLOR = { trabalhando: '#4ade80', pensando: '#a78bfa', esperando: '#fbbf24', ocioso: '#8b95a8', saindo: '#f87171', bravo: '#ef4444' };
 const FONT_STACK = '"Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif';
 
 // =====================================================================
@@ -461,22 +465,22 @@ function areaPill(nome, cor, fs) {
   });
 }
 // Balão branco e arredondado, com rabinho (say: triângulo, think: bolinhas). draw(g, x, y) desenha o conteúdo, de tamanho iw x ih
-function makeBubble(iw, ih, fs, tailKind, draw) {
+function makeBubble(iw, ih, fs, tailKind, draw, bravo = false) {
   const padX = Math.round(fs * 0.78), padY = Math.round(fs * 0.48), w = Math.ceil(iw) + 2 * padX, h = Math.ceil(ih) + 2 * padY;
-  const tail = Math.round(fs * 0.62), m = Math.round(fs * 0.45), lw = Math.max(1, Math.round(fs * 0.13));
-  const [, g, out] = mkText(w, h + tail, m), cx = m + w / 2, ink = '#2d3350';
+  const tail = Math.round(fs * 0.62), m = Math.round(fs * 0.45), lw = Math.max(1, Math.round(fs * (bravo ? 0.2 : 0.13)));
+  const [, g, out] = mkText(w, h + tail, m), cx = m + w / 2, ink = bravo ? '#c0392b' : '#2d3350', bg = bravo ? '#fff3f0' : '#ffffff';
   const r = Math.min(h / 2, fs * 0.95);
   g.shadowColor = 'rgba(20,24,40,0.3)'; g.shadowBlur = Math.round(fs * 0.5); g.shadowOffsetY = Math.round(fs * 0.18);
-  g.fillStyle = '#ffffff'; rrPath(g, m, m, w, h, r); g.fill();
+  g.fillStyle = bg; rrPath(g, m, m, w, h, r); g.fill();
   g.shadowColor = 'transparent'; g.shadowBlur = 0; g.shadowOffsetY = 0;
   g.lineWidth = lw; g.strokeStyle = ink; g.lineJoin = 'round';
   rrPath(g, m + lw / 2, m + lw / 2, w - lw, h - lw, r); g.stroke();
   if (tailKind === 'say') {
     const tw = fs * 0.46;
-    g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(cx - tw, m + h - lw); g.lineTo(cx, m + h + tail); g.lineTo(cx + tw, m + h - lw); g.closePath(); g.fill();
+    g.fillStyle = bg; g.beginPath(); g.moveTo(cx - tw, m + h - lw); g.lineTo(cx, m + h + tail); g.lineTo(cx + tw, m + h - lw); g.closePath(); g.fill();
     g.lineCap = 'butt'; g.lineJoin = 'miter';
     g.beginPath(); g.moveTo(cx - tw, m + h - lw / 2); g.lineTo(cx, m + h + tail - lw * 0.4); g.lineTo(cx + tw, m + h - lw / 2); g.stroke();
-    g.fillStyle = '#ffffff'; g.fillRect(cx - tw + lw * 0.8, m + h - lw * 1.2, 2 * tw - lw * 1.6, lw * 1.6);
+    g.fillStyle = bg; g.fillRect(cx - tw + lw * 0.8, m + h - lw * 1.2, 2 * tw - lw * 1.6, lw * 1.6);
   } else {                                                         // balão de pensamento: duas bolinhas
     for (const [dx, dy, rr] of [[-fs * 0.1, fs * 0.28, fs * 0.2], [-fs * 0.42, fs * 0.62, fs * 0.12]]) {
       g.fillStyle = '#ffffff'; g.beginPath(); g.arc(cx + dx, m + h + dy, rr, 0, Math.PI * 2); g.fill(); g.stroke();
@@ -485,18 +489,19 @@ function makeBubble(iw, ih, fs, tailKind, draw) {
   draw(g, m + padX, m + padY);
   return out;
 }
-// ferramenta em negrito e o detalhe em cinza: "Read: src/api/campanhas.ts"
-function bubbleSay(head, detail, fs, maxW) {
-  return cached(`B|${fs}|${maxW}|${head}|${detail}`, () => {
+// ferramenta em negrito e o detalhe em cinza: "Read: src/api/campanhas.ts". estilo 'bravo' = borda e texto vermelhos
+function bubbleSay(head, detail, fs, maxW, estilo = '') {
+  const bravo = estilo === 'bravo';
+  return cached(`B|${fs}|${maxW}|${estilo}|${head}|${detail}`, () => {
     const bold = fontOf(fs, 700), reg = fontOf(fs, 500);
     const full = detail ? `${head}: ${detail}` : head;
     const fit = fitText(full, bold, maxW), hh = fit.slice(0, head.length), rest = fit.slice(head.length);
     const w1 = Math.ceil(textW(bold, hh)), w2 = rest ? Math.ceil(textW(reg, rest)) : 0;
     return makeBubble(w1 + w2, fs * 1.25, fs, 'say', (g, x, y) => {
       g.textBaseline = 'alphabetic';
-      g.font = bold; g.fillStyle = '#262b3d'; g.fillText(hh, x, y + fs * 1.0);
+      g.font = bold; g.fillStyle = bravo ? '#b3261e' : '#262b3d'; g.fillText(hh, x, y + fs * 1.0);
       if (rest) { g.font = reg; g.fillStyle = '#5a6178'; g.fillText(rest, x + w1, y + fs * 1.0); }
-    });
+    }, bravo);
   });
 }
 function bubbleThink(n, fs) { // n = 1..3 pontinhos acesos
@@ -568,7 +573,9 @@ function flush() {
   _n = 0;
 }
 
-// o = { pose:'stand'|'walk'|'sitD'|'sitS', dir:0 frente|1 direita|2 costas|3 esquerda, frame:0..3, bob:0|-1, blink:0|1, cup }
+// o = { pose:'stand'|'walk'|'sitD'|'sitS'|'play'|'arm'|'yay', dir:0 frente|1 direita|2 costas|3 esquerda, frame:0..3, bob:0|-1, blink:0|1, cup }
+//   play = de costas, mãos no controle do fliperama (frame alterna os braços); arm = de lado com o braço erguido
+//   (frame 0 atrás da cabeça, 1 esticado à frente: chicote e punho do chefe); yay = de frente, os dois braços para cima
 // devolve um canvas 32x42 com os pés em (16,37); cabeça grande (chibi), cabelo com volume e franja
 function buildPerson(a, o) {
   const [cv, g] = makeCanvas(32, 42);
@@ -576,7 +583,7 @@ function buildPerson(a, o) {
   const cl = a.cl, pal = a.pal, pose = o.pose, f = o.frame, walk = pose === 'walk';
   const side = o.dir === 1 || o.dir === 3, back = o.dir === 2;
   const sit = pose === 'sitD' || pose === 'sitS';
-  const by = walk ? (f & 1 ? -1 : 0) : (pose === 'stand' ? o.bob : 0);
+  const by = walk ? (f & 1 ? -1 : 0) : (sit ? 0 : o.bob);
   const hy = -23 + by, st = cl.style, of = cl.outfit;
   if (pose !== 'sitD') softShadow(g, 16, 36, 8, 2);
 
@@ -598,13 +605,21 @@ function buildPerson(a, o) {
   // ---- tronco e braços ----
   if (side) {
     P(-3, -14 + by, 6, 8, pal.shirt, pal.shirtO);
-    const sw = walk ? [-2, 0, 2, 0][f] : 0;
-    P(-1 + sw, -13 + by, 3, 5, pal.shirtL, pal.shirtO); P(-1 + sw, -8 + by, 3, 2, cl.skin, cl.skinO);
-    if (o.cup) P(2 + sw, -11 + by, 3, 3, '#f4efe6', '#6b5a48');
+    if (pose !== 'arm') {
+      const sw = walk ? [-2, 0, 2, 0][f] : 0;
+      P(-1 + sw, -13 + by, 3, 5, pal.shirtL, pal.shirtO); P(-1 + sw, -8 + by, 3, 2, cl.skin, cl.skinO);
+      if (o.cup) P(2 + sw, -11 + by, 3, 3, '#f4efe6', '#6b5a48');
+    }
   } else {
     P(-4, -14 + by, 8, 8, pal.shirt, pal.shirtO);
     if (pose === 'sitD') { P(-6, -13, 2, 6, pal.shirt, pal.shirtO); P(4, -13, 2, 6, pal.shirt, pal.shirtO); }
-    else {
+    else if (pose === 'yay') {
+      P(-7, -25 + by, 2, 11, pal.shirt, pal.shirtO); P(-7, -27 + by, 2, 2, cl.skin, cl.skinO);
+      P(5, -25 + by, 2, 11, pal.shirt, pal.shirtO); P(5, -27 + by, 2, 2, cl.skin, cl.skinO);
+    } else if (pose === 'play') {
+      const u = f & 1;
+      P(-6, -14 + by + u, 2, 4, pal.shirt, pal.shirtO); P(4, -15 + by + u, 2, 4, pal.shirt, pal.shirtO);
+    } else {
       const aL = walk ? [1, 0, -1, 0][f] : 0, aR = walk ? [-1, 0, 1, 0][f] : 0;
       P(-6, -13 + by + aL, 2, 5, pal.shirt, pal.shirtO); P(-6, -8 + by + aL, 2, 2, cl.skin, cl.skinO);
       P(4, -13 + by + aR, 2, 5, pal.shirt, pal.shirtO); P(4, -8 + by + aR, 2, 2, cl.skin, cl.skinO);
@@ -640,6 +655,10 @@ function buildPerson(a, o) {
     else { P(-6, hy - 4, 12, 5, cl.cap, cl.capO); P(-1, hy - 5, 2, 1, cl.capD, cl.capO); P(-5, hy + 1, 10, 8, cl.hair, cl.hairO); }
     P(-3, hy + 9, 6, 1, cl.skin, cl.skinO);                                                              // nuca
   }
+  if (pose === 'arm') {                                // braço erguido por cima do cabelo (atrás da cabeça ou esticado à frente)
+    if (f === 0) { P(-6, -17 + by, 2, 4, pal.shirtL, pal.shirtO); P(-8, -20 + by, 2, 3, pal.shirtL, pal.shirtO); P(-9, -22 + by, 2, 2, cl.skin, cl.skinO); }
+    else { P(0, -14 + by, 5, 2, pal.shirtL, pal.shirtO); P(5, -14 + by, 2, 2, cl.skin, cl.skinO); }
+  }
   flush();
 
   // ---- sombreado do tronco, das pernas e dos braços; a roupa ----
@@ -649,7 +668,7 @@ function buildPerson(a, o) {
   }
   if (side) {
     D(-3, -14 + by, 1, 8, pal.shirtD); D(-3, -7 + by, 6, 1, pal.shirtD); D(2, -14 + by, 1, 1, pal.shirtL);
-    if (!back) D(-1 + (walk ? [-2, 0, 2, 0][f] : 0), -9 + by, 3, 1, pal.shirtD);
+    if (!back && pose !== 'arm') D(-1 + (walk ? [-2, 0, 2, 0][f] : 0), -9 + by, 3, 1, pal.shirtD);
     if (of === 1) { D(-3, -13 + by, 3, 1, pal.shirtD); D(1, -9 + by, 2, 1, pal.shirtL); }
     else if (of === 3) { D(1, -13 + by, 1, 5, pal.shirtD); D(2, -12 + by, 1, 3, '#f4efe6'); }
   } else {
@@ -660,8 +679,10 @@ function buildPerson(a, o) {
       else if (of === 2) { D(-3, -13 + by, 2, 2, '#ffffff'); D(1, -13 + by, 2, 2, '#ffffff'); D(-1, -13 + by, 2, 1, cl.skin); D(0, -11 + by, 1, 4, pal.shirtL); D(0, -10 + by, 1, 1, '#ffffff'); D(0, -8 + by, 1, 1, '#ffffff'); }
       else { D(-4, -13 + by, 2, 6, pal.shirtD); D(2, -13 + by, 2, 6, pal.shirtD); D(-2, -13 + by, 4, 6, '#f4efe6'); D(-2, -13 + by, 4, 1, '#d6cfc0'); D(-1, -8 + by, 2, 1, pal.shirtL); }
       if (cl.badge && of !== 3) { D(0, -13 + by, 1, 4, '#2c3342'); D(-1, -9 + by, 3, 2, '#ffffff'); D(-1, -9 + by, 3, 1, pal.accent); }
+      if (cl.tie) { D(0, -13 + by, 1, 1, dk(cl.tie, 0.3)); D(0, -12 + by, 1, 4, cl.tie); D(-1, -9 + by, 3, 1, cl.tie); }
     }
-    if (pose !== 'sitD') { const aL = walk ? [1, 0, -1, 0][f] : 0, aR = walk ? [-1, 0, 1, 0][f] : 0; D(-6, -13 + by + aL, 1, 5, pal.shirtD); D(5, -13 + by + aR, 1, 5, pal.shirtD); D(-6, -9 + by + aL, 2, 1, pal.shirtD); D(4, -9 + by + aR, 2, 1, pal.shirtD); }
+    if (pose === 'yay' || pose === 'play') { /* braços erguidos: sem a sombra dos braços caídos */ }
+    else if (pose !== 'sitD') { const aL = walk ? [1, 0, -1, 0][f] : 0, aR = walk ? [-1, 0, 1, 0][f] : 0; D(-6, -13 + by + aL, 1, 5, pal.shirtD); D(5, -13 + by + aR, 1, 5, pal.shirtD); D(-6, -9 + by + aL, 2, 1, pal.shirtD); D(4, -9 + by + aR, 2, 1, pal.shirtD); }
     else { D(-6, -13, 1, 6, pal.shirtD); D(5, -13, 1, 6, pal.shirtD); }
   }
   // ---- rosto: sombras, sobrancelhas, olhos grandes com brilho, boca, bochechas ----
@@ -672,6 +693,9 @@ function buildPerson(a, o) {
     else if (o.blink) D(2, hy + 5, 2, 1, cl.iris); else { D(2, hy + 4, 2, 3, cl.iris); D(2, hy + 4, 1, 1, '#ffffff'); }
     D(3, hy + 8, 2, 1, '#b25a58'); D(1, hy + 7, 2, 1, cl.blush);
     if (cl.beard) { D(-1, hy + 7, 6, 3, cl.hairS); D(3, hy + 8, 2, 1, '#6a3a3a'); }
+    if (cl.bigode) D(2, hy + 7, 3, 1, cl.hairO);
+    if (cl.bravo) D(1, hy + 2, 2, 1, cl.hairO);
+    if (cl.tie) D(2, -12 + by, 1, 3, cl.tie);
     if (st === 5) { D(-4, hy - 4, 5, 1, cl.capL); }
     else if (st !== 2) { D(-3, hy - 3, 4, 1, cl.hairH); D(-5, hy + 1, 1, 3, cl.hairS); }
   } else if (!back) {
@@ -686,7 +710,10 @@ function buildPerson(a, o) {
     else { D(-4, hy + 4, 2, 3, cl.iris); D(2, hy + 4, 2, 3, cl.iris); D(-4, hy + 4, 1, 1, '#ffffff'); D(2, hy + 4, 1, 1, '#ffffff'); }
     if (!cl.glasses) { D(-5, hy + 7, 2, 1, cl.blush); D(3, hy + 7, 2, 1, cl.blush); }
     D(-1, hy + 8, 2, 1, '#b25a58');
+    if (pose === 'yay') D(-1, hy + 8, 2, 2, '#8a3040');                              // boca aberta de alegria
     if (cl.beard) { D(-4, hy + 7, 8, 3, cl.hairS); D(-1, hy + 8, 2, 1, '#6a3a3a'); D(-4, hy + 7, 1, 1, cl.hair); D(3, hy + 7, 1, 1, cl.hair); }
+    if (cl.bigode) { D(-3, hy + 7, 6, 1, cl.hairO); D(-3, hy + 8, 1, 1, cl.hairO); D(2, hy + 8, 1, 1, cl.hairO); }
+    if (cl.bravo) { D(-5, hy + 2, 2, 1, cl.hairO); D(3, hy + 2, 2, 1, cl.hairO); D(-3, hy + 3, 1, 1, cl.hairO); D(2, hy + 3, 1, 1, cl.hairO); }
     if (st === 5) { D(-5, hy - 4, 5, 1, cl.capL); D(-6, hy - 1, 12, 1, cl.capL); }
     else if (st === 4) { D(-4, hy - 5, 3, 1, cl.hairH); D(1, hy - 4, 3, 1, cl.hairH); D(-6, hy - 3, 1, 2, cl.hairH); }
     else if (st !== 2) { D(-4, hy - 3, 4, 1, cl.hairH); D(-5, hy - 2, 1, 1, cl.hairH); D(2, hy + 1, 2, 1, cl.hairS); }
@@ -744,7 +771,7 @@ function drawScreen(g, ax, ay, mode, now, pal, seed) {
 // =====================================================================
 // 7. ATOR (um agente na cena) — reaproveitado por id, nunca recriado à toa
 // =====================================================================
-class Actor {
+export class Actor {
   constructor(d, pal, now) {
     this.id = d.id; this.d = d; this.pal = pal;
     const r = mulberry32(hashStr(d.id));
@@ -798,6 +825,8 @@ export class Office {
     this._last = 0; this._raf = 0; this._wheel = 0;
     this._ptrs = new Map(); this._drag = null; this._pinch = null;
     this.fs = 11; this.nameW = 90; this.bubW = 160; this.lowZoom = false;   // texto: tamanho da fonte e larguras máximas, em px do dispositivo
+    this.dir = new Diretor(this);   // animações de situação (gags.js)
+    this._door = 0;
     this._frame = (ts) => this.frame(ts);
     this._bind();
     this.resize();
@@ -814,6 +843,9 @@ export class Office {
     for (const [t, f] of this._listeners || []) this.canvas.removeEventListener(t, f);
   }
   setBackground(c) { this.bg = c || this.bg; }
+  setGags(on) { this.dir.ligar(on, performance.now()); }
+  // dispara uma animação na mão (console: __escritorio.office.testar('chicote')); tipos em gags.js
+  testar(tipo, id) { return this.dir.testar(tipo, id || this.selectedId, performance.now()); }
   setHidden(set) { this.hidden = new Set(set); if (this.state) this.setState(this.state); }
 
   // ---------- entrada do estado vindo do servidor/demo ----------
@@ -838,7 +870,7 @@ export class Office {
     for (const id of want) order.push(id);
 
     // atores: cria os novos (pai primeiro), atualiza os existentes
-    const seen = new Set();
+    const seen = new Set(), criados = [], primeira = this.first;
     const ensure = (ag) => {
       if (seen.has(ag.id)) return;
       seen.add(ag.id);
@@ -852,6 +884,7 @@ export class Office {
         act = new Actor(ag, platPal(this.plats.get(ag.plataforma).cor), now);
         this.actors.set(ag.id, act);
         this.allocSeat(act);
+        criados.push(act);
       } else {
         if (ag.estado !== act.d.estado) act.estadoSince = now;
         act.d = ag;
@@ -895,12 +928,14 @@ export class Office {
       else { a.x = DOOR_X; a.y = 0.12; a.face = 1; a.entering = true; a.alpha = 0; this.think(a, now, false); }
     }
     this.first = false;
+    this.dir.aoEstado(criados, primeira, now);
   }
 
   removeActor(a) {
     if (a.seat >= 0) { const s = this.seats.get(a.d.plataforma); if (s) { s[a.seat] = null; while (s.length && !s[s.length - 1]) s.pop(); } }
     this.freeSpot(a);
     this.actors.delete(a.id);
+    this.dir.aoRemover(a);
     if (this.hoverId === a.id) { this.hoverId = null; this.onHover && this.onHover(null); }
     if (this.selectedId === a.id) { this.selectedId = null; this.onSelect && this.onSelect(null); }
   }
@@ -976,7 +1011,7 @@ export class Office {
     const { X, Y, rowDs, totalW } = this.layoutDims(zl, zc);
     const ox0 = Math.floor((X - totalW) / 2), lx = X - 1 - LOUNGE_W;   // lx = onde começa o lounge (canto direito)
     const w = {
-      X, Y, lx, zones: zl, blocked: new Uint8Array(X * Y), statics: [], signs: [], spots: [], spotByKey: new Map(),
+      X, Y, lx, zones: zl, blocked: new Uint8Array(X * Y), statics: [], signs: [], spots: [], spotByKey: new Map(), arcadeSpots: [],
       seatTiles: new Map(), bounds: null, baseAx: 0, baseAy: 0,
     };
     let yAcc = HALL_D;
@@ -1005,7 +1040,15 @@ export class Office {
       w.signs.push({ x: (z.x0 + 5) * T, y: z.y0 * T - 11, nome: z.nome, cor: z.cor });
     }
 
-    // saguão: elevador na parede dos fundos (à esquerda), lounge no canto direito
+    // saguão: elevador na parede dos fundos (à esquerda), dois fliperamas ao lado dele, lounge no canto direito
+    // (na frente de cada fliperama, o lugar de quem joga; atrás, o de quem só assiste)
+    ARCADE_TX.forEach((tx, i) => {
+      if (tx >= lx - 1) return;
+      add(T_ARCADE, null, tx * T, T, T, { v: i, ph: i * 3.7 });
+      blk(tx, 0);
+      w.arcadeSpots.push({ gx: tx, gy: 1, px: tx + 0.5, py: 1.75, seat: false, play: true, cab: i, kid: 'A' + i, owner: null });
+    });
+    ARCADE_TX.forEach((tx, i) => { if (tx < lx - 1) w.arcadeSpots.push({ gx: tx, gy: 3, px: tx + 0.8, py: 3.3, seat: false, watch: true, kid: 'W' + i, owner: null }); });
     for (const [tx, kind, v] of [[lx, 'plant', 0], [lx + 1, 'coffee'], [lx + 5, 'plant', 1], [lx + 8, 'plant', 0]]) {
       if (kind === 'plant') add(T_PLANT, null, tx * T + 8, T, T, { v, ph: tx * 0.7 });
       else add(T_COFFEE, sprCoffee(), tx * T + 8, T, T);
@@ -1027,11 +1070,13 @@ export class Office {
     for (let j = 1; j < HALL_D; j++) for (let i = 5; i < X - 1; i++) {
       if (w.blocked[j * X + i] || (i + j) % 2) continue;
       if (j === 1 && i >= lx + 3 && i <= lx + 7) continue;
+      if (ARCADE_TX.includes(i)) continue;                            // frente dos fliperamas (jogadores e quem assiste)
       stand.push({ gx: i, gy: j, px: i + 0.5, py: j + 0.5, seat: false, kid: i + ',' + j, owner: null, d: Math.hypot(i - (lx + 1.5), j - 1.5) });
     }
     stand.sort((a, b) => a.d - b.d);
     w.spots.push(...stand);
     for (const sp of w.spots) w.spotByKey.set(sp.kid, sp);
+    for (const sp of w.arcadeSpots) w.spotByKey.set(sp.kid, sp);
 
     // limites do mundo em pixels lógicos
     w.bounds = { minX: -SIDE - 4, maxX: X * T + SIDE + 4, minY: -WALL_H - 6, maxY: Y * T + SLAB + 6 };
@@ -1166,9 +1211,9 @@ export class Office {
       else if (kind === 1) { R(cx - 6, fy + 3, 12, 16, '#4a5380'); R(cx - 4, fy + 5, 5, 5, '#f2c14e'); R(cx, fy + 9, 5, 7, '#e8837f'); R(cx - 5, fy + 13, 4, 4, '#6fcad8'); }
       else { R(cx - 6, fy + 3, 12, 16, '#f1ede0'); R(cx - 5, fy + 5, 10, 2, '#4a5380'); R(cx - 5, fy + 9, 10, 1, '#b4b9cc'); R(cx - 5, fy + 11, 8, 1, '#b4b9cc'); R(cx - 5, fy + 13, 9, 1, '#b4b9cc'); R(cx - 5, fy + 16, 4, 2, '#e8837f'); }
     }
-    // relógio
-    {
-      const cxk = 5 * T + 6;
+    // relógio, entre a 2ª e a 3ª janela (do lado do elevador ficam os fliperamas)
+    if (wins.length >= 2) {
+      const cxk = wins[1] + 52;
       R(cxk - 7, -37, 15, 15, 'rgba(60,70,130,0.16)'); R(cxk - 7, -38, 15, 15, '#c9a878'); R(cxk - 6, -37, 13, 13, '#fdfdff'); R(cxk - 5, -36, 11, 11, '#f3f5fa');
       for (const [dx, dy] of [[0, -5], [5, 0], [0, 5], [-5, 0]]) R(cxk + dx, -31 + dy, 1, 1, '#4a5380');
       R(cxk, -35, 1, 4, INK); R(cxk, -31, 3, 1, INK); R(cxk, -31, 1, 1, '#e8837f');
@@ -1185,44 +1230,51 @@ export class Office {
     const w = this.world;
     for (const sp of w.spots) sp.owner = null;
     for (const a of this.actors.values()) {
-      if (a.kind === 'lounge') {
+      if (a.kind === 'lounge' || a.kind === 'arcade') {
         const sp = w.spotByKey.get(a.spotKey);
         if (sp && !sp.owner) { sp.owner = a.id; a.spot = sp; } else { a.spot = null; a.kind = 'none'; }
       }
     }
     for (const a of this.actors.values()) {
-      if (a.fresh) continue;
+      if (a.fresh || a.gag) continue;
       const kind = a.kind;
       if (kind === 'desk' && a.arrived) { const s = this.seatTile(a); if (s) { a.x = s.px; a.y = s.py; } }
-      else if (kind === 'lounge' && a.arrived && a.spot) { a.x = a.spot.px; a.y = a.spot.py; }
+      else if ((kind === 'lounge' || kind === 'arcade') && a.arrived && a.spot) { a.x = a.spot.px; a.y = a.spot.py; }
       else {
         // em trânsito: garante que está dentro do mapa e replaneja
         a.x = clamp(a.x, 0.3, w.X - 0.3); a.y = clamp(a.y, 0.3, w.Y - 0.3);
         if (kind !== 'none') { a.kind = 'none'; this.think(a, now, false); }
       }
     }
+    this.dir.aoRelayout(now);
   }
   seatTile(a) { const t = this.world.seatTiles.get(a.d.plataforma); return t && t[a.seat]; }
 
   // ---------- decisão e caminhos ----------
   // decide para onde o ator quer ir pelo estado dele
   think(a, now, direct) {
+    if (this.dir.segura(a, now)) return;          // no meio de uma animação (ou esperando o chefe terminar)
     const d = a.d;
     let want;
     if (a.leaving || d.estado === 'saindo') want = 'exit';
+    else if (this.dir.querArcade(a, now)) want = 'arcade';   // só esperando os subagentes: vai jogar
     else if (d.estado === 'ocioso') want = (a.kind === 'desk' && now - a.estadoSince < IDLE_DELAY) ? 'desk' : 'lounge';
     else want = 'desk';
     if (want === a.kind) return;
     this.assign(a, want, now, direct);
   }
   assign(a, kind, now, direct) {
-    if (a.kind === 'lounge' && kind !== 'lounge') this.freeSpot(a);
+    if ((a.kind === 'lounge' || a.kind === 'arcade') && kind !== a.kind) this.freeSpot(a);
     let tx, ty, fx, fy;
     if (kind === 'desk') {
       const s = this.seatTile(a);
       if (!s) { tx = Math.floor(DOOR_X); ty = 0; fx = DOOR_X; fy = 0.5; } else { tx = s.cx; ty = s.cy; fx = s.px; fy = s.py; }
     } else if (kind === 'lounge') {
       const sp = this.allocSpot(a);
+      tx = sp.gx; ty = sp.gy; fx = sp.px; fy = sp.py;
+    } else if (kind === 'arcade') {                // fliperama livre; lotado, fica no lounge
+      let sp = this.dir.vagaArcade(a);
+      if (sp) { a.spot = sp; a.spotKey = sp.kid; } else sp = this.allocSpot(a);
       tx = sp.gx; ty = sp.gy; fx = sp.px; fy = sp.py;
     } else { tx = Math.floor(DOOR_X); ty = 0; fx = DOOR_X; fy = 0.1; }
     a.kind = kind; a.arrived = false;
@@ -1283,47 +1335,50 @@ export class Office {
 
   // ---------- atualização por quadro ----------
   update(dt, now) {
-    const w = this.world;
-    let doorWant = 0;
+    this._door = 0;
     for (const a of this.actors.values()) {
       this.think(a, now, false);
-      // movimento
-      if (!a.arrived && a.path.length) {
-        let step = SPEED * dt;
-        a.moving = true;
-        while (step > 0 && a.pi < a.path.length) {
-          const tx = a.path[a.pi], ty = a.path[a.pi + 1];
-          const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
-          if (dist <= step) { a.x = tx; a.y = ty; step -= dist; a.pi += 2; }
-          else {
-            a.x += dx / dist * step; a.y += dy / dist * step; step = 0;
-            if (Math.abs(dx) > Math.abs(dy)) a.face = dx > 0 ? 0 : 2; else a.face = dy > 0 ? 1 : 3;
-          }
-        }
-        a.walkT += dt * 8;
-        if (a.pi >= a.path.length) this.arrive(a, now);
-      }
-      // aparece/some junto da porta do elevador (a opacidade segue a distância até a porta)
-      if (a.entering || a.kind === 'exit') {
-        const dd = Math.hypot(a.x - DOOR_X, a.y - 0.1);
-        a.alpha = clamp((dd - 0.1) / 0.6, 0, 1);
-        if (a.entering && dd > 0.9) { a.entering = false; a.alpha = 1; }
-        if (a.kind === 'exit' && (a.arrived || a.alpha <= 0.02)) a.gone = true;
-        if (dd < 2.5) doorWant = 1;
-      }
-      // posição na tela e ordem de profundidade (pelo y dos pés)
-      a.fx = Math.round(a.x * T); a.fy = Math.round(a.y * T);
-      if (a.kind === 'desk' && a.arrived) { const s = this.seatTile(a); a.key = s ? s.base + 5 : a.fy; }
-      else a.key = a.fy + 0.002;
+      this.mover(a, dt, now);
       if (a.gone) { this.left.set(a.id, now); this.removeActor(a); }
     }
-    this.doorOpen += (doorWant - this.doorOpen) * Math.min(1, dt * 6);
+    this.dir.update(dt, now);                      // animações e o Chefe (que não vem do servidor)
+    this.doorOpen += (this._door - this.doorOpen) * Math.min(1, dt * 6);
     // câmera suave quando se pede "centralizar"
     if (this.camTarget) {
       const c = this.camTarget, f = Math.min(1, dt * 9);
       this.tx = Math.round(this.tx + (c.tx - this.tx) * f); this.ty = Math.round(this.ty + (c.ty - this.ty) * f);
       if (Math.abs(c.tx - this.tx) < 1 && Math.abs(c.ty - this.ty) < 1) { this.tx = c.tx; this.ty = c.ty; this.camTarget = null; }
     }
+  }
+  // anda pelo caminho, aparece/some na porta do elevador e calcula a posição na tela e a profundidade
+  mover(a, dt, now) {
+    if (!a.arrived && a.path.length) {
+      let step = SPEED * dt;
+      a.moving = true;
+      while (step > 0 && a.pi < a.path.length) {
+        const tx = a.path[a.pi], ty = a.path[a.pi + 1];
+        const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
+        if (dist <= step) { a.x = tx; a.y = ty; step -= dist; a.pi += 2; }
+        else {
+          a.x += dx / dist * step; a.y += dy / dist * step; step = 0;
+          if (Math.abs(dx) > Math.abs(dy)) a.face = dx > 0 ? 0 : 2; else a.face = dy > 0 ? 1 : 3;
+        }
+      }
+      a.walkT += dt * 8;
+      if (a.pi >= a.path.length) this.arrive(a, now);
+    }
+    // aparece/some junto da porta do elevador (a opacidade segue a distância até a porta)
+    if (a.entering || a.kind === 'exit') {
+      const dd = Math.hypot(a.x - DOOR_X, a.y - 0.1);
+      a.alpha = clamp((dd - 0.1) / 0.6, 0, 1);
+      if (a.entering && dd > 0.9) { a.entering = false; a.alpha = 1; }
+      if (a.kind === 'exit' && (a.arrived || a.alpha <= 0.02)) a.gone = true;
+      if (dd < 2.5) this._door = 1;
+    }
+    // posição na tela e ordem de profundidade (pelo y dos pés)
+    a.fx = Math.round(a.x * T); a.fy = Math.round(a.y * T);
+    if (a.kind === 'desk' && a.arrived) { const s = this.seatTile(a); a.key = s ? s.base + 5 : a.fy; }
+    else a.key = a.fy + 0.002;
   }
 
   // ---------- desenho ----------
@@ -1364,8 +1419,12 @@ export class Office {
     items.length = 0;
     for (const s of w.statics) items.push(s);
     for (const a of this.actors.values()) items.push(a);
+    for (const a of this.dir.npcs.values()) items.push(a);
     items.sort(byKey);
     for (let i = 0; i < items.length; i++) this.drawItem(g, items[i], now);
+    // extras das animações (chicote, veia de raiva, suor, estrelinhas, mão levantada) por cima dos móveis
+    for (let i = 0; i < items.length; i++) { const it = items[i]; if (it.t === T_ACTOR && it.alpha >= 0.03) this.dir.depois(g, it, now, it.dox || 0, it.doy || 0); }
+    this.dir.drawParticulas(g);
 
     // véu de luz quente bem leve sobre o mapa (suaviza os contrastes)
     g.fillStyle = 'rgba(255,240,214,0.025)'; g.fillRect(-SIDE, -WALL_H, w.X * T + 2 * SIDE, WALL_H + w.Y * T + SLAB);
@@ -1437,7 +1496,7 @@ export class Office {
           g.globalAlpha = 0.1; rect(g, it.x + 1, it.base + 5, 12, 3, it.pal.glow);
           g.globalAlpha = 1;
         } else if (mode === 2 || mode === 3) { g.globalAlpha = 0.1; rect(g, it.x - 1, it.base - 1, 12, 7, mode === 2 ? '#b7a4ff' : '#ffd36b'); g.globalAlpha = 1; }
-        if (seated) {
+        if (seated && !a.semMaos) {
           const t = mode === 1 ? ((now / 120) | 0) & 1 : 0, key = 600 + t;
           let hs = a.sprs[key]; if (!hs) hs = a.sprs[key] = buildHands(a, t);
           if (a.alpha < 1) g.globalAlpha = a.alpha;
@@ -1447,6 +1506,7 @@ export class Office {
         break;
       }
       case T_ACTOR: this.drawActor(g, it, now); break;
+      case T_ARCADE: this.dir.drawArcade(g, it, now); break;
       default: break;
     }
   }
@@ -1461,21 +1521,29 @@ export class Office {
     else if (lounging && a.spot && a.spot.seat) pidx = 3;
     else if (lounging) cup = 1;
     else if (moving) { pidx = 1; dir = a.face === 0 ? 1 : a.face === 1 ? 0 : a.face === 2 ? 3 : 2; }
-    const frame = pidx === 1 ? ((a.walkT | 0) & 3) : 0;
+    let frame = pidx === 1 ? ((a.walkT | 0) & 3) : 0, ox = 0, oy = 0;
+    // animações: a pose e o deslocamento podem vir do diretor (4 fliperama, 5 braço erguido, 6 comemorando)
+    const ov = this.dir.pose(a, now);
+    a.semMaos = !!(ov && ov.semMaos);
+    if (ov) {
+      if (ov.pidx != null) { pidx = ov.pidx; dir = ov.dir || 0; frame = ov.frame || 0; cup = 0; }
+      ox = ov.ox || 0; oy = ov.oy || 0;
+    }
     const bob = pidx === 0 && ((((now + a.phase) / 700) | 0) & 1) ? 1 : 0;
     const blink = ((now + a.phase * 3) % 4300) < 140 ? 1 : 0;
     const idx = ((((pidx * 4 + dir) * 4 + frame) * 2 + bob) * 2 + blink) * 2 + cup;
     let s = a.sprs[idx];
     if (!s) {
       const o = this._pose;
-      o.pose = pidx === 0 ? 'stand' : pidx === 1 ? 'walk' : pidx === 2 ? 'sitD' : 'sitS'; o.dir = dir; o.frame = frame; o.bob = bob ? -1 : 0; o.blink = blink; o.cup = !!cup;
+      o.pose = ['stand', 'walk', 'sitD', 'sitS', 'play', 'arm', 'yay'][pidx]; o.dir = dir; o.frame = frame; o.bob = bob ? -1 : 0; o.blink = blink; o.cup = !!cup;
       s = a.sprs[idx] = buildPerson(a, o);
     }
     if (a.alpha < 1) g.globalAlpha = a.alpha;
-    g.drawImage(s, a.fx - 16, a.fy - 37);
-    if (sitting && a.d.estado === 'trabalhando') {         // luz da tela no rosto, vinda da esquerda
+    g.drawImage(s, a.fx - 16 + ox, a.fy - 37 + oy);
+    if (sitting && a.d.estado === 'trabalhando' && !ov) {  // luz da tela no rosto, vinda da esquerda
       g.globalAlpha = a.alpha * (0.12 + 0.05 * Math.sin(now / 300 + a.phase)); rect(g, a.fx - 5, a.fy - 19, 2, 5, a.pal.glow);
     }
+    a.dox = ox; a.doy = oy;                           // o diretor desenha os extras depois de todos os itens
     g.globalAlpha = 1;
     // área de clique (pixels do dispositivo)
     const k = this.k;
@@ -1570,6 +1638,7 @@ export class Office {
     for (const c of caixas) if (c.a === hov && hov !== sel) ordem.push(c);
     for (const c of caixas) if (c.a === sel) ordem.push(c);
     for (const c of ordem) this.drawOverlayBox(c, now);
+    this.dir.drawTextos(g, now);                     // onomatopeias por cima de tudo (CRACK!, K.O.!)
   }
   measureOverlay(a, now, hl) {
     if (a.alpha < 0.05) return null;
@@ -1583,7 +1652,9 @@ export class Office {
     const ls = namePill(nome, d.estado, a.pal.accent, hl ? 1 : rel ? 2 : 0, fs, hl ? wide : this.nameW), bf = Math.max(8, Math.round(fs * 0.93));
     const lw = ls.pw, lh = ls.ph, ly = hy - lh - gap;
     let bs = null;
-    if (a.arrived && a.kind === 'desk' && (hl || !this.lowZoom)) {   // com a vista toda numa tela pequena, balões só de quem foi tocado (a bolinha do nome já diz o estado)
+    const fala = this.dir.fala(a, now);              // fala de uma animação (bronca, chicote, susto...) passa na frente
+    if (fala) bs = bubbleSay(fala.head, fala.det || '', bf, hl ? wide : this.bubW, fala.estilo);
+    else if (a.arrived && a.kind === 'desk' && (hl || !this.lowZoom)) {   // com a vista toda numa tela pequena, balões só de quem foi tocado (a bolinha do nome já diz o estado)
       if (d.estado === 'trabalhando') {
         const detalhe = hl || k / this.dpr >= 1.5;   // de longe, só o nome da ferramenta
         bs = bubbleSay(d.ferramenta || d.detalhe || '...', d.ferramenta && d.detalhe && detalhe ? d.detalhe : '', bf, hl ? wide : detalhe ? this.bubW : this.nameW);
@@ -1700,7 +1771,7 @@ export class Office {
     const items = this.items;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.t !== T_ACTOR || it.alpha < 0.3) continue;
+      if (it.t !== T_ACTOR || it.alpha < 0.3 || it.npc) continue;
       const h = it.hit;
       if (dx >= h.x0 && dx <= h.x1 && dy >= h.y0 && dy <= h.y1) return it;
     }
@@ -1782,3 +1853,6 @@ export class Office {
   }
   hoverClear() { if (this.hoverId) { this.hoverId = null; } this.onHover && this.onHover(null); }
 }
+
+// usados por gags.js (as animações de situação)
+export { T, DOOR_X, rect, blob, makeSprite, sprite, cached, makeCanvas, textW, platPal, personColors, dk, lt, hashStr, mulberry32, clamp, FONT_STACK, ST_COLOR };
