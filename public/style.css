@@ -18,12 +18,18 @@
   --st-vivo: #4ade80;
   --st-recon: #fbbf24;
   --st-demo: #a78bfa;
-  --painel-w: 340px;
+  --ui: 1;                                   /* escala da interface: cresce nas telas grandes (2K, 4K a 100%) */
+  --painel-w: calc(340px * var(--ui));
+  --detalhe-w: min(calc(600px * var(--ui)), 44vw);
   --cod-bg: #0e121a;
   --mono: ui-monospace, "SF Mono", Consolas, "Liberation Mono", monospace;
   --topo-h: 52px;
   color-scheme: dark;
 }
+@media (min-width: 2400px) and (max-resolution: 1.2dppx) { :root { --ui: 1.25; } }   /* 2K a 100% (com o Windows em 150% ou 200% o sistema já aumenta) */
+@media (min-width: 3400px) and (max-resolution: 1.2dppx) { :root { --ui: 1.75; } }   /* 4K a 100% */
+/* nas telas grandes a interface em volta da sala cresce junto (a sala em si se ajusta sozinha) */
+.topo, .painel, .detalhe, .controles, .vazio-card, .dica > * { zoom: var(--ui); }
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #eef1f6;
@@ -145,7 +151,7 @@ h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0.01em; white
 .vazio-card span { font-size: 12.5px; color: var(--texto-2); }
 
 .dica {
-  position: absolute; z-index: 5; max-width: min(300px, calc(100% - 16px)); padding: 10px 12px; pointer-events: none;
+  position: absolute; z-index: 5; max-width: min(calc(300px * var(--ui)), calc(100% - 16px)); padding: calc(10px * var(--ui)) calc(12px * var(--ui)); pointer-events: none;
   background: var(--surface); border: 1px solid var(--borda); border-radius: 10px; box-shadow: var(--sombra); font-size: 12.5px;
 }
 .dica-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -245,6 +251,12 @@ h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: 0.01em; white
 }
 .detalhe.entra { animation: det-entra 0.2s ease-out; }
 @keyframes det-entra { from { transform: translateX(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* No computador o detalhe é uma barra lateral: ocupa o lugar da lista e a cena encolhe ao lado (nada fica coberto). */
+@media (min-width: 700px) {
+  .palco:has(> .detalhe:not([hidden])) { grid-template-columns: minmax(0, 1fr) var(--detalhe-w); }
+  .palco:has(> .detalhe:not([hidden])) > .painel { display: none; }
+  .detalhe { position: relative; inset: auto; z-index: auto; width: auto; grid-row: 1; grid-column: 2; box-shadow: none; }
+}
 
 .det-topo, .det-abas, .det-aviso { flex: none; }
 .det-topo { display: grid; gap: 5px; padding: 12px 16px 10px; border-bottom: 1px solid var(--borda); min-width: 0; }
@@ -414,7 +426,13 @@ p.mudo { margin: 4px 0; font-size: 13px; }
 .ctx-tokens { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 699px) {
-  .detalhe { position: fixed; inset: 0; z-index: 60; width: auto; border-left: 0; box-shadow: none; padding-top: env(safe-area-inset-top); }
+  .detalhe {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; height: 60dvh; z-index: 60; width: auto;
+    border-left: 0; border-top: 1px solid var(--borda); border-radius: 16px 16px 0 0; box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.3);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .detalhe.entra { animation: det-sobe 0.22s ease-out; }
+  @keyframes det-sobe { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
   .det-topo { padding: 10px 12px 8px; }
   .det-painel { padding: 12px 12px 28px; }
   .det-abas { padding: 0 4px; } .det-aba { padding: 10px 9px; } .det-n { margin-left: 4px; padding: 0 5px; }

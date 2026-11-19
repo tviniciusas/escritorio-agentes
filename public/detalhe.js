@@ -314,7 +314,7 @@ export class Detalhe {
     const plat = this.o.plat((a && a.plataforma) || r.plataforma || (this.id.split(':')[0]));
     this.el.chip.style.setProperty('--c', corOk(plat.cor));
     this.el.chip.title = plat.nome || '';
-    this.el.nome.textContent = (a && a.nome) || r.nome || this.id;
+    this.el.nome.textContent = a && a.apelido ? `${a.apelido} · ${a.nome || r.nome || ''}` : (a && a.nome) || r.nome || this.id;
     this.el.nome.title = this.id;
     const est = (a && a.estado) || r.estado || '';
     this.el.badge.textContent = est || '—';
@@ -675,12 +675,13 @@ export class Detalhe {
     campo('Papel', (a && a.papel) ?? r.papel);
     // pai e filhos: o servidor manda; se faltar, vale o que o estado ao vivo diz
     const pai = r.pai || (a && a.paiId ? { id: a.paiId, nome: (this.o.agente(a.paiId) || {}).nome || a.paiId } : null);
-    campo('Pai', pai ? h('button', { type: 'button', class: 'ctx-link', text: pai.nome || pai.id, onclick: () => this.o.navegar(pai.id) }) : null);
+    const apPai = pai && (this.o.agente(pai.id) || {}).apelido;
+    campo('Pai', pai ? h('button', { type: 'button', class: 'ctx-link', text: apPai ? `${apPai} · ${pai.nome || pai.id}` : pai.nome || pai.id, onclick: () => this.o.navegar(pai.id) }) : null);
     const filhos = Array.isArray(r.filhos) && r.filhos.length ? r.filhos : (this.o.filhos ? this.o.filhos(this.id) : []);
     campo('Filhos', filhos.length ? h('div', { class: 'ctx-filhos' }, filhos.map((f) => {
       const vivo = this.o.agente(f.id), est = (vivo && vivo.estado) || f.estado;
       return h('button', { type: 'button', class: 'ctx-filho', title: f.titulo || '', onclick: () => this.o.navegar(f.id) },
-        h('span', { text: f.nome || f.id }), est ? h('span', { class: 'badge', style: `--c:var(--e-${ESTADOS.includes(est) ? est : 'ocioso'})`, text: est }) : null);
+        h('span', { text: (this.o.agente(f.id) || {}).apelido || f.nome || f.id }), est ? h('span', { class: 'badge', style: `--c:var(--e-${ESTADOS.includes(est) ? est : 'ocioso'})`, text: est }) : null);
     })) : null);
     campo('Início', fmtDataHora(r.iniciadoEm));
     campo('Duração', r.duracaoMs != null ? fmtDur(r.duracaoMs) : null);

@@ -1,17 +1,18 @@
 # Escritório dos agentes
 
-Um escritório em pixel art que roda no navegador e mostra, ao vivo, os agentes de IA desta máquina trabalhando. Cada agente é um bonequinho na mesa da sala da plataforma dele. Enquanto roda uma ferramenta, ele digita e mostra num balão o que está fazendo. Quando termina a vez, levanta e vai para o sofá. Subagente senta ao lado de quem o abriu, e um modelo chamado por ferramenta (DeepSeek, imagem na Alibaba) aparece ligado a quem chamou.
+Um escritório em pixel art que roda no navegador e mostra, ao vivo, os agentes de IA desta máquina trabalhando. Cada agente é um bonequinho com nome de gente (Ana, Brad, Duda, Megan…) sentado de costas na cadeira, na frente da mesa da sala da plataforma dele, como no Gather. Ao lado do nome, um emoji diz o que ele está fazendo (💻 trabalhando, 💭 pensando, ⏳ esperando, ☕ na pausa); passando o mouse, um balão mostra a ferramenta e o detalhe. Quando termina a vez, levanta e vai para o sofá. Subagente senta ao lado de quem o abriu, e um modelo chamado por ferramenta (DeepSeek, imagem na Alibaba) aparece ligado a quem chamou.
 
 **Qualquer LLM entra.** Claude Code, Codex, Cursor e Gemini CLI são lidos direto das transcrições. DeepSeek e Alibaba (Qwen) aparecem quando um agente os chama pelo MCP. GLM, MiMo, Llama, Mistral ou o modelo que for entram com [um `POST`](#pôr-qualquer-coisa-no-escritório): o seu bot, o seu script ou o seu agente caseiro ganha uma mesa na sala.
 
 <p align="center">
-  <img src="docs/imagens/escritorio.gif" alt="O escritório em movimento: agentes digitando nas mesas, balões com a ferramenta em uso e linhas ligando subagentes a quem os chamou" width="795">
+  <img src="docs/imagens/escritorio.gif" alt="O escritório em movimento: agentes digitando nas mesas, balões com a ferramenta em uso e linhas ligando subagentes a quem os chamou" width="760">
 </p>
 
 - **Sem dependências.** Só Node 20 ou mais novo: nada de `npm install`.
 - **Sem hooks.** Ele só lê as transcrições que cada agente já grava em disco.
+- **Responsivo.** Celular, Full HD, 2K e 4K: a sala se encaixa na tela no maior zoom inteiro que couber, a interface cresce nas telas grandes a 100% e, no celular, o detalhe abre como uma folha embaixo com o agente à vista em cima.
 - **Ao vivo.** O servidor varre as transcrições a cada 1,5 s e empurra o estado para a página por [SSE](https://developer.mozilla.org/pt-BR/docs/Web/API/Server-sent_events).
-- **Tudo desenhado em código.** Pessoas, móveis, piso, carpetes, plantas e os textos (nomes, balões e nomes das áreas) são gerados num `<canvas>`, sem nenhuma imagem.
+- **Tudo desenhado em código.** Pessoas, móveis, piso, tapetes, plantas e os textos (nomes, balões e nomes das áreas) são gerados num `<canvas>`, sem nenhuma imagem. A arte tem 32 pixels por tile e contorno escuro em tudo, no estilo do Gather.
 
 ## Começar
 
@@ -36,7 +37,7 @@ PASTAS_GRUPO=Empresa npm start  # "projetos/Empresa/loja" aparece só como "loja
 |---|---|
 | <img src="docs/imagens/zoom.png" alt="Zonas do Claude Code, Cursor, DeepSeek e Alibaba com os agentes nas mesas e balões de ferramenta" width="560"> | <img src="docs/imagens/celular.png" alt="O escritório numa tela de celular, com a lista de agentes recolhida embaixo" width="220"> |
 
-Cada plataforma ganha uma zona de carpete xadrez neutro, com mesas brancas de postos diferentes entre si. A cor da plataforma aparece em detalhes: a bolinha do nome da área, as telas dos monitores, a faixa da cadeira e a plaquinha da mesa. A parede dos fundos tem janelas, quadros, estante e o elevador, por onde os agentes chegam e vão embora. O lounge, com piso em ziguezague, sofás e divisórias baixas de madeira, é para quem está ocioso.
+Cada plataforma ganha uma zona de tapete cinza trançado, com bancadas brancas de três postos. Nenhum posto é igual ao vizinho: gabinete com monitor em pé, dois monitores, ultrawide, notebook com luminária ou impressora, e por cima caneca, patinho de borracha, post-its, mochila no chão, frigobar embaixo da mesa. A tela principal de cada posto mostra o estado de quem senta ali (código sendo digitado, três pontinhos de quem pensa, pausa de quem espera). A cor da plataforma aparece em detalhes: a bolinha do nome da área, as ventoinhas do gabinete, a faixa da cadeira e a plaquinha da mesa. A parede dos fundos tem janelas, quadros, estante e o elevador, por onde os agentes chegam e vão embora. O lounge, com carpete lilás em ziguezague, sofás e divisórias baixas de madeira, é para quem está ocioso.
 
 **Visão geral, com a lista de agentes**
 
@@ -44,7 +45,7 @@ Cada plataforma ganha uma zona de carpete xadrez neutro, com mesas brancas de po
 
 **O detalhe de um agente**
 
-Clicando num agente (na sala ou na lista) abre o painel com tudo o que está na transcrição: pedidos, respostas, pensamentos, cada ferramenta com entrada, saída e duração, arquivos mexidos, tokens, contexto e custo.
+Clicando num agente (na sala ou na lista) abre uma barra lateral, e a sala encolhe ao lado dela para nada ficar coberto. Ali está tudo o que a transcrição tem: pedidos, respostas, pensamentos, cada ferramenta com entrada, saída e duração, arquivos mexidos, tokens, contexto e custo.
 
 <img src="docs/imagens/detalhe.png" alt="Painel de detalhe do agente root: estado Trabalhando, ferramenta em execução, últimos eventos com Edit, WebSearch e Grep, e a última resposta do agente">
 
@@ -54,7 +55,8 @@ Clicando num agente (na sala ou na lista) abre o painel com tudo o que está na 
 |---|---|
 | Zoom | botões `+` e `−`, ou a roda do mouse |
 | Voltar ao enquadramento | botão `⛶` |
-| Abrir o detalhe | clique no agente; o endereço vira `#agente=<id>` e dá para compartilhar o link |
+| Ver o que o agente está fazendo | passe o mouse por cima dele |
+| Abrir o detalhe (barra lateral) | clique no agente: a câmera aproxima e acompanha ele, sem rearrumar a sala; ao fechar, volta a vista inteira. O endereço vira `#agente=<id>` e dá para compartilhar o link. O botão **Agentes** volta para a lista |
 | Fechar o detalhe e tirar a seleção | `Esc` |
 | Esconder uma plataforma | clique no chip dela na lista |
 | Ligar ou desligar as animações | botão `★` (a escolha fica guardada no navegador) |
@@ -62,6 +64,16 @@ Clicando num agente (na sala ou na lista) abre o painel com tudo o que está na 
 ### Animações
 
 A sala reage ao que acontece com os agentes. Tudo sai das transcrições, sem hook nenhum.
+
+| Chicote: abriu um subagente | Bronca: o subagente errou |
+|---|---|
+| <img src="docs/imagens/animacoes/chicote.gif" alt="O agente vai até a mesa do subagente novo e estala o chicote três vezes; o subagente pula e responde Sim, senhor!" width="400"> | <img src="docs/imagens/animacoes/bronca.gif" alt="O agente que chamou vem de punho erguido e veia saltando reclamar com o subagente que errou, que responde Não foi culpa minha!" width="400"> |
+| **O Chefe: o agente principal errou** | **Fliperama: esperando os subagentes** |
+| <img src="docs/imagens/animacoes/chefe.gif" alt="O Chefe, de terno e gravata vermelha, dá bronca no agente principal: De novo?! e Presta atenção!" width="400"> | <img src="docs/imagens/animacoes/fliperama.gif" alt="O agente joga luta no fliperama do saguão, com K.O. no fim do round" width="400"> |
+| **Teclado pegando fogo e bug fugindo** | **Pausa: café e soneca** |
+| <img src="docs/imagens/animacoes/fogo-e-bug.gif" alt="Chamas e fumaça no teclado de quem roda muitas ferramentas seguidas, e um bug sai do monitor correndo" width="400"> | <img src="docs/imagens/animacoes/pausa.gif" alt="O agente serve um café na cafeteira e depois cochila deitado no sofá, com cobertor e zz" width="400"> |
+| **Subagente terminou** | |
+| <img src="docs/imagens/animacoes/comemora.gif" alt="O subagente levanta com os braços para cima, solta confete e diz Entregue!" width="400"> | |
 
 | Quando | O que acontece |
 |---|---|
@@ -209,13 +221,17 @@ POST /api/agente ─────────────────────
 | [`fontes/cursor.js`](fontes/cursor.js) | Agentes do Cursor. |
 | [`fontes/outras.js`](fontes/outras.js) | Codex e Gemini. |
 | [`fontes/historico.js`](fontes/historico.js) | Leitura incremental do histórico completo de um agente. |
-| [`public/render.js`](public/render.js) | A cena: tiles, zonas, móveis, pessoas, caminhos (BFS), nomes e balões. |
+| [`public/render.js`](public/render.js) | A cena: tiles, zonas, piso e paredes, caminhos (BFS), câmera, nomes e balões. |
+| [`public/pixel.js`](public/pixel.js) | A base da arte: medidas, cores, primitivas de pixel e o contorno automático dos sprites. |
+| [`public/pessoa.js`](public/pessoa.js) | O boneco: 8 cabelos, 4 roupas e todas as poses (em pé, andando, sentado, comemorando...). |
+| [`public/moveis.js`](public/moveis.js) | A mobília: bancadas e o que vai em cima delas, cadeiras, plantas, sofás, cafeteira, bebedouro e estante. |
+| [`public/apelidos.js`](public/apelidos.js) | Os nomes curtos dos agentes (brasileiros e americanos), sem repetir na sala. |
 | [`public/gags.js`](public/gags.js) | As animações: fliperama, chicote, bronca e o Chefe, bug, fogo no teclado, susto, tonto, comemoração, mão levantada e a pausa (café, celular, papo e soneca). |
 | [`public/app.js`](public/app.js) | Lista, filtros, zoom, seleção e a ligação com o SSE. |
 | [`public/detalhe.js`](public/detalhe.js) | O painel de detalhe (Agora, Histórico, Ferramentas, Contexto). |
 | [`public/demo.js`](public/demo.js) | Os agentes de mentira do `?demo=1`. |
 
-O mundo é desenhado em pixels lógicos e ampliado por um fator inteiro, então os pixels ficam nítidos em qualquer zoom; os textos (nomes e balões) são desenhados depois, em resolução de tela, com a fonte do sistema. A profundidade sai do y dos pés: quem está mais embaixo na tela é desenhado na frente.
+O mundo é medido em pixels lógicos (16 por tile) e a arte é desenhada com o dobro da resolução (32 pixels por tile), em retângulos de meio pixel. Cada sprite ganha um contorno automático: todo pixel vazio encostado num pixel cheio vira um tom escuro da cor vizinha. O zoom é inteiro. Nos zooms pares, cada pixel da arte vira um quadrado exato na tela; nos ímpares, a cena é desenhada no zoom par de cima e reduzida com suavização, para nenhum pixel sair maior que o vizinho. Os textos (nomes e balões) são desenhados depois, em resolução de tela, com a fonte do sistema. A profundidade sai do y dos pés: quem está mais embaixo na tela é desenhado na frente.
 
 ## Privacidade
 

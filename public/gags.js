@@ -21,7 +21,10 @@
  * estado. Nada aqui muda o estado: só a cena. Quem está numa animação tem `a.gag` (quem age) ou `a.reac`
  * (quem reage); `a.preso` segura o alvo na mesa até a animação acabar.
  */
-import { T, DOOR_X, rect, blob, makeSprite, sprite, cached, makeCanvas, textW, Actor, platPal, dk, lt, hashStr, FONT_STACK, buildPerson } from './render.js';
+import { DOOR_X, cached, textW, Actor, FONT_STACK } from './render.js';
+import { T, U, rect, blob, makeSprite, sprite, makeCanvas, rawCanvas, put, putS, platPal, dk, lt, hashStr } from './pixel.js';
+import { buildPerson, CORPO } from './pessoa.js';
+import { OL } from './moveis.js';
 
 const CD = { chicote: 15000, bronca: 45000, susto: 6000, tonto: 15000, espreguica: 30000 };   // intervalo mínimo entre duas iguais no mesmo agente
 const RECENTE = 30000;                 // evento mais velho que isso (quando o estado chegou atrasado) não anima
@@ -55,6 +58,9 @@ const FALAS = {
   estalo: ['CRACK!', 'PLAFT!', 'TCHÁ!'],
 };
 const um = (lista, n) => lista[(n >>> 0) % lista.length];
+// topo da cabeça (y do mundo) de quem está em pé ou sentado (sentado, o boneco desce CORPO.sentado px)
+const sentadoEm = (a) => a.arrived && (a.kind === 'desk' || (a.kind === 'lounge' && a.spot && a.spot.seat));
+const topo = (a, fy = a.fy) => fy - CORPO.altura + (sentadoEm(a) ? CORPO.sentado : 0);
 const lerp = (a, b, t) => a + (b - a) * t;
 const CONFETE = ['#ff6b6b', '#ffd23f', '#4dd2ff', '#7ee08a', '#c08bff', '#ff9ad5', '#ffffff'];
 
@@ -186,7 +192,7 @@ export class Diretor {
     const s = alvo.kind === 'desk' ? of.seatTile(alvo) : null;
     let cands;
     // na mesa: de preferência no corredor da frente (assim fica na frente dos objetos das mesas vizinhas)
-    if (s) cands = [[s.cx - 1, s.cy + 2, s.cx - 0.45, s.cy + 2.15], [s.cx + 2, s.cy + 2, s.cx + 2.45, s.cy + 2.15], [s.cx - 1, s.cy + 1, s.cx - 0.45, s.cy + 1.6, 1], [s.cx + 2, s.cy + 1, s.cx + 2.45, s.cy + 1.6, 1]];
+    if (s) cands = [[s.cx - 1, s.cy + 1, s.cx - 0.35, s.cy + 1.4], [s.cx + 2, s.cy + 1, s.cx + 2.35, s.cy + 1.4], [s.cx, s.cy + 2, s.cx + 0.4, s.cy + 2.4, 1], [s.cx + 1, s.cy + 2, s.cx + 1.6, s.cy + 2.4, 1]];
     else {
       const px = alvo.spot ? alvo.spot.px : alvo.x, py = alvo.spot ? alvo.spot.py : alvo.y, gx = Math.floor(px), gy = Math.floor(py);
       cands = [[gx - 1, gy, gx - 0.3, py], [gx + 1, gy, gx + 1.3, py], [gx - 1, gy + 1, gx - 0.3, gy + 1.3], [gx + 1, gy + 1, gx + 1.3, gy + 1.3], [gx, gy + 1, px + 0.6, gy + 1.5]];
@@ -235,7 +241,7 @@ export class Diretor {
     if (!this.on || this.esfriando(a, tipo, now)) return;
     (a.cd ||= {})[tipo] = now;
     a.reac = { tipo, t0: now, ate: now + DUR[tipo], n: this.seq++ };
-    if (tipo === 'comemora') { a.preso = Math.max(a.preso || 0, now + DUR.comemora); this.confete(a.fx, a.fy - 26); }
+    if (tipo === 'comemora') { a.preso = Math.max(a.preso || 0, now + DUR.comemora); this.confete(a.fx, topo(a)); }
   }
   reac(a, now) { const r = a.reac; if (r && now < r.ate) return r; if (r) a.reac = null; return null; }
 
@@ -296,8 +302,8 @@ export class Diretor {
     for (const a of this.of.actors.values()) if (a.kind === 'cafe' && a.arrived) { servindo = true; break; }
     if (!servindo) return;
     const p = ((now / 120) | 0) & 1;
-    rect(g, it.x - (p ? 1 : 0), it.y - 14, 1, 4, '#5a3418');                   // café caindo na caneca
-    if (((now / 250) | 0) & 1) rect(g, it.x - 4, it.y - 25, 3, 2, '#ffcf5a');  // luz de "servindo"
+    rect(g, it.x - (p ? U : 0), it.y - 13.5, U, 3, '#5a3418');                 // café caindo na caneca
+    if (((now / 250) | 0) & 1) rect(g, it.x - 4.5, it.y - 23, 9, 1, '#ffcf5a');  // luz de "servindo"
   }
   // soneca deitado no sofá: a pessoa de frente, girada 90° (cabeça na almofada da esquerda), e o cobertor
   deitado(g, a, now) {
@@ -306,20 +312,22 @@ export class Diretor {
     if (!s) {
       const p = buildPerson(a, { pose: 'stand', dir: 0, frame: 0, bob: 0, blink: 1, cup: false, semSombra: true });
       const [c, cg] = makeCanvas(42, 32);
-      cg.translate(0, 32); cg.rotate(-Math.PI / 2); cg.drawImage(p, 0, 0);
+      cg.translate(0, 32); cg.rotate(-Math.PI / 2); put(cg, p, 0, 0);
       s = a.sprs.deitado = c;
     }
-    g.drawImage(s, x0 - 7, -7);
+    put(g, s, x0 - 13, -7);
     const resp = (((now + a.phase) / 1300) | 0) & 1, cor = COBERTOR[hashStr(a.id) % COBERTOR.length];
-    rect(g, x0 + 18, 3 + resp, 14, 12 - resp, cor); rect(g, x0 + 18, 3 + resp, 14, 1, lt(cor, 0.45)); rect(g, x0 + 18, 3 + resp, 2, 12 - resp, lt(cor, 0.2));
-    for (let x = 22; x < 31; x += 4) rect(g, x0 + x, 4 + resp, 1, 10 - resp, dk(cor, 0.14));
-    rect(g, x0 + 18, 14, 14, 1, dk(cor, 0.3));
-    a.ovx = x0 + 9; a.ovy = 2;                     // nome e "zz" em cima da cabeça
+    rect(g, x0 + 14, 4 + resp, 13, 10 - resp, cor); rect(g, x0 + 14, 4 + resp, 13, 1, lt(cor, 0.45)); rect(g, x0 + 14, 4 + resp, 2, 10 - resp, lt(cor, 0.2));
+    for (let x = 18; x < 27; x += 4) rect(g, x0 + x, 5 + resp, 1, 8 - resp, dk(cor, 0.14));
+    rect(g, x0 + 14, 13, 13, 1, dk(cor, 0.3));
+    a.ovx = x0 + 8; a.ovy = 3;                     // nome e "zz" em cima da cabeça
   }
   bolhaNariz(g, a, fx, fy, now) {
     const ph = ((now + a.phase * 3) % 2800) / 2800, r = Math.round(1 + ph * 3);
     let cx, cy;
-    if (a.deitado) { cx = a.spot.sofa * T + 14; cy = 5 - r; } else { cx = fx + 1 + r; cy = fy - 15; }
+    if (a.deitado) { cx = a.spot.sofa * T + 11; cy = 6 - r; }
+    else if (a.kind === 'desk') { cx = fx + 5 + r; cy = fy + CORPO.boca + CORPO.sentado; }      // de costas: a bolha aparece do lado
+    else { cx = fx + 1 + r; cy = fy + CORPO.boca + (sentadoEm(a) ? CORPO.sentado : 0); }
     if (ph < 0.92) {
       blob(g, cx, cy, r, r, 'rgba(170,220,255,0.7)');
       rect(g, cx - r + 1, cy - r + 1, 1, 1, '#ffffff');
@@ -329,14 +337,14 @@ export class Diretor {
     for (let i = 0; i < 2; i++) {
       const p = (now / 1300 + i / 2) % 1;
       g.globalAlpha = (1 - p) * 0.7;
-      rect(g, fx + 6 + Math.round(Math.sin(p * 6 + i * 2)), fy - 14 - Math.round(p * 7), 1, 1, '#ffffff');
+      rect(g, fx + 6 + Math.round(Math.sin(p * 6 + i * 2)), fy - 10 - Math.round(p * 6), 1, 1, '#ffffff');
     }
     g.globalAlpha = 1;
   }
   celular(g, fx, fy, now) {
-    rect(g, fx - 1, fy - 11, 3, 4, '#1b2133'); rect(g, fx - 1, fy - 11, 3, 1, '#3a4259');
-    rect(g, fx, fy - 10, 1, 2, ((now / 450) | 0) % 3 ? '#8ef0ff' : '#d8fbff');
-    g.globalAlpha = 0.13; rect(g, fx - 3, fy - 18, 6, 5, '#8ef0ff'); g.globalAlpha = 1;   // a tela ilumina o rosto
+    rect(g, fx - 1, fy - 8, 3, 3, '#1b2133'); rect(g, fx - 1, fy - 8, 3, 1, '#3a4259');
+    rect(g, fx, fy - 7, 1, 1, ((now / 450) | 0) % 3 ? '#8ef0ff' : '#d8fbff');
+    g.globalAlpha = 0.13; rect(g, fx - 3, fy - 15, 6, 4, '#8ef0ff'); g.globalAlpha = 1;   // a tela ilumina o rosto
   }
   // ---------- bug, fogo no teclado, cochilo no build ----------
   soltarBug(a, now) {
@@ -354,11 +362,13 @@ export class Diretor {
   fogo(g, a, now) {
     const s = this.of.seatTile(a);
     if (!s) return;
-    const x0 = s.cx * T + 9, y0 = s.base + 1;            // teclado da mesa
+    const x0 = s.cx * T + 9, y0 = s.base + 7;            // teclado da mesa (as chamas passam por cima do nome)
     for (let i = 0; i < 5; i++) {
-      const h = 3 + ((hashStr('f' + i + ':' + ((now / 90) | 0)) % 5));
+      const h = 6 + ((hashStr('f' + i + ':' + ((now / 90) | 0)) % 6)) - (i === 0 || i === 4 ? 2 : 0);
       const x = x0 + 1 + i * 3;
-      rect(g, x, y0 - h, 2, h, '#ff5a1f'); rect(g, x, y0 - h + 1, 2, Math.max(1, h - 3), '#ffb020'); rect(g, x, y0 - 1, 2, 1, '#fff0a0');
+      rect(g, x - U, y0 - h + 1, 3, h - 1, '#e8421a'); rect(g, x, y0 - h, 2, h, '#ff5a1f'); rect(g, x + U, y0 - h - 1, 1, 1, '#ff5a1f');
+      rect(g, x, y0 - h + 2, 2, Math.max(1, h - 4), '#ffb020'); rect(g, x + U, y0 - h + 1.5, 1, U, '#ffb020'); rect(g, x + U, y0 - 2.5, 1, 2.5, '#fff0a0');
+      rect(g, x + (i & 1), y0 - h - 2.5, U, U, '#ff8a3a');
     }
     if (Math.random() < 0.15) this.parts.push({ x: x0 + 2 + Math.random() * 12, y: y0 - 6, vx: (Math.random() - 0.5) * 6, vy: -14 - Math.random() * 8, gr: 0, vida: 0.9, cor: 'rgba(120,120,130,0.6)', w: 2, h: 2 });
   }
@@ -366,7 +376,7 @@ export class Diretor {
     for (const b of this.bugs) {
       const x = Math.round(b.x), y = Math.round(b.y), p = ((now / 70) | 0) & 1;
       g.globalAlpha = Math.min(1, b.vida * 2);
-      rect(g, x - 1, y, 4, 2, '#2a2433'); rect(g, x, y - 1, 2, 1, '#3d3550');
+      rect(g, x - 1, y, 4, 2, '#2a2433'); rect(g, x - U, y - U, 3, U, '#2a2433'); rect(g, x, y, 2, U, '#5a4f72');
       rect(g, b.vx > 0 ? x + 3 : x - 2, y, 1, 1, '#e5484d');                      // cabeça vermelha
       for (const lx of [x - 1, x + 1]) { rect(g, lx + p, y - 1 + (p ? 0 : 3), 1, 1, '#2a2433'); rect(g, lx + 1 - p, y + 2, 1, 1, '#2a2433'); }
     }
@@ -455,7 +465,7 @@ export class Diretor {
   }
   posePausa(a, now) {
     if (!this.on) return null;
-    if (this.buildLongo(a, now)) return { olhosFechados: true, oy: 2 + ((((now + a.phase) / 1500) | 0) & 1), semMaos: true };
+    if (this.buildLongo(a, now)) return { oy: -1 - ((((now + a.phase) / 1500) | 0) & 1) };   // debruçado na mesa
     if (a.kind === 'cafe' && a.arrived) return { pidx: 0, dir: 2 };                          // de costas, servindo
     if (!a.arrived && a.kind === 'lounge' && a.atividade === 'cafe' && a.cafeFeito) return { cup: 1 };   // andando com a caneca
     if (!a.arrived || a.kind !== 'lounge' || !a.spot) return null;
@@ -528,16 +538,16 @@ export class Diretor {
     if (G) {
       const s = a.face === 2 ? -1 : 1;
       if (G.fase !== 'ir' && G.tipo === 'chicote') this.chicote(g, a, fx, fy, s, now);
-      else if (G.tipo === 'bronca' && (G.fase !== 'ir' || a.npc)) this.veia(g, fx + s * 4, fy - 29, now);
+      else if (G.tipo === 'bronca' && (G.fase !== 'ir' || a.npc)) this.veia(g, fx + s * 4, topo(a, fy) - 3, now);
     }
     const r = this.reac(a, now);
     if (r) {
-      if (r.tipo === 'apanha' || r.tipo === 'levaBronca' || r.tipo === 'susto') this.suor(g, fx, fy, now - r.t0);
-      else if (r.tipo === 'tonto') this.estrelas(g, fx, fy, now);
+      if (r.tipo === 'apanha' || r.tipo === 'levaBronca' || r.tipo === 'susto') this.suor(g, fx, topo(a, fy), now - r.t0);
+      else if (r.tipo === 'tonto') this.estrelas(g, fx, topo(a, fy), now);
     }
     if (this.on && a.arrived && a.kind === 'desk' && !G && !r && a.d.estado === 'esperando' && PERGUNTA.test(a.d.ferramenta || '')) this.mao(g, a, fx, fy, now);
-    if (this.pegandoFogo(a, now)) { this.fogo(g, a, now); this.suor(g, fx, fy, now - a.fogoAte); }
-    else if (!G && !r && this.buildLongo(a, now)) this.bolhaNariz(g, a, fx, fy + 1, now);
+    if (this.pegandoFogo(a, now)) { this.fogo(g, a, now); this.suor(g, fx, topo(a, fy), now - a.fogoAte); }
+    else if (!G && !r && this.buildLongo(a, now)) this.bolhaNariz(g, a, fx, fy, now);
     if (this.on && a.arrived && a.kind === 'lounge' && a.spot && !G && !r) {
       if (this.dormindo(a, now)) this.bolhaNariz(g, a, fx, fy, now);
       else if (!a.spot.seat && a.atividade === 'celular') this.celular(g, fx, fy, now);
@@ -552,9 +562,9 @@ export class Diretor {
   }
   chicote(g, a, fx, fy, s, now) {
     const G = a.gag, alvo = this.of.actors.get(G.alvo), u = this.uChicote(G, now), golpe = u >= 0.44;
-    const hx = fx + s * (golpe ? 6 : -8), hy = fy + (golpe ? -13 : -21);            // mão (a mesma do sprite)
+    const hx = fx + s * (golpe ? 5 : -6), hy = fy + (golpe ? -9 : -16);             // mão (a mesma do sprite)
     const cx = hx + s * (golpe ? 3 : 0), cy = hy + (golpe ? 0 : -3);                 // ponta do cabo
-    const ax = alvo ? alvo.fx : fx + s * 24, ay = alvo ? alvo.fy - 20 : fy - 20;     // cabeça do alvo
+    const ax = alvo ? alvo.fx : fx + s * 20, ay = alvo ? topo(alvo) + 5 : fy - 15;  // cabeça do alvo
     let px, py, mx, my;
     if (u < 0) { px = cx - s * 2; py = cy + 15; mx = cx - s * 5; my = cy + 7; }                       // pendurado, esperando
     else if (!golpe) { px = cx - s * 15; py = cy - 4 + Math.sin(now / 80) * 2; mx = cx - s * 7; my = cy - 10; }   // rodando atrás
@@ -566,14 +576,14 @@ export class Diretor {
       const t = i / n, r = 1 - t;
       const x = Math.round(r * r * cx + 2 * r * t * mx + t * t * px), y = Math.round(r * r * cy + 2 * r * t * my + t * t * py);
       const grosso = t < 0.6;
-      rect(g, x, y, grosso ? 2 : 1, grosso ? 2 : 1, grosso ? '#4a2c18' : '#6b4428');
+      rect(g, x, y, grosso ? 1.5 : 1, grosso ? 1.5 : 1, grosso ? '#4a2c18' : '#6b4428'); if (grosso) rect(g, x, y, 1, U, '#7a5030');
     }
     // cabo de madeira com a ponta dourada
     if (golpe) { rect(g, Math.min(hx, cx), hy - 1, 4, 2, '#3a2416'); rect(g, cx - (s > 0 ? 0 : 1), hy - 1, 1, 2, '#d8b45a'); }
     else { rect(g, hx - 1, cy, 2, 4, '#3a2416'); rect(g, hx - 1, cy, 2, 1, '#d8b45a'); }
   }
   estalo(a, alvo, now) {
-    const ax = alvo.fx, ay = alvo.fy - 20;
+    const ax = alvo.fx, ay = topo(alvo) + 5;
     alvo.jolt = now;
     for (let i = 0; i < 10; i++) {
       const ang = Math.random() * Math.PI * 2, v = 25 + Math.random() * 50;
@@ -596,24 +606,26 @@ export class Diretor {
     }
   }
   // gota de suor escorrendo do lado da cabeça
-  suor(g, fx, fy, t) {
-    const cai = ((t / 110) | 0) % 6, x = fx + 6, y = fy - 26 + cai;
+  suor(g, fx, top, t) {
+    const cai = ((t / 110) | 0) % 6, x = fx + 5, y = top + 2 + cai;
     g.globalAlpha = 1 - cai / 7;
-    rect(g, x + 1, y, 1, 1, '#bfe6ff'); rect(g, x, y + 1, 3, 2, '#7cc8ff'); rect(g, x + 1, y + 3, 1, 1, '#5aa8e6'); rect(g, x, y + 1, 1, 1, '#ffffff');
+    rect(g, x + 1, y - U, 1, 1.5, '#2c6aa8'); rect(g, x + U, y + U, 2, 1, '#2c6aa8'); rect(g, x, y + 1, 3, 2, '#2c6aa8'); rect(g, x + U, y + 3, 2, U, '#2c6aa8');
+    rect(g, x + 1, y, 1, 1, '#bfe6ff'); rect(g, x + U, y + 1, 2, 2, '#7cc8ff'); rect(g, x + 1, y + 2.5, 1, U, '#5aa8e6'); rect(g, x + U, y + 1, 1, 1, '#ffffff');
     g.globalAlpha = 1;
   }
-  estrelas(g, fx, fy, now) {
+  estrelas(g, fx, top, now) {
     for (let i = 0; i < 3; i++) {
-      const ang = now / 230 + i * 2.094, x = fx + Math.round(Math.cos(ang) * 7), y = fy - 30 + Math.round(Math.sin(ang) * 2.2);
+      const ang = now / 230 + i * 2.094, x = fx + Math.round(Math.cos(ang) * 6), y = top - 1 + Math.round(Math.sin(ang) * 2);
+      rect(g, x - U, y - 1.5, 2, 4, '#8a5a12'); rect(g, x - 1.5, y - U, 4, 2, '#8a5a12');
       rect(g, x, y - 1, 1, 3, '#ffd23f'); rect(g, x - 1, y, 3, 1, '#ffd23f'); rect(g, x, y, 1, 1, '#fff7c8');
     }
   }
   // braço erguido acenando, de quem espera a resposta do usuário
   mao(g, a, fx, fy, now) {
     const w = ((now / 260) | 0) & 1, x = fx + 6 + w, pal = a.pal, cl = a.cl;
-    rect(g, x - 1, fy - 27, 4, 14, pal.shirtO);
-    rect(g, x, fy - 24, 2, 10, pal.shirt); rect(g, x, fy - 24, 1, 10, pal.shirtL);
-    rect(g, x, fy - 26, 2, 2, cl.skin);
+    rect(g, x - U, fy - 22.5, 3, 15, pal.shirtO);
+    rect(g, x, fy - 20, 2, 12.5, pal.shirt); rect(g, x, fy - 20, U, 12.5, pal.shirtL);
+    rect(g, x, fy - 22, 2, 2, cl.skin); rect(g, x - U, fy - 21.5, U, 1, cl.skin);
   }
   drawParticulas(g) {
     const now = performance.now();
@@ -640,7 +652,7 @@ export class Diretor {
   // ---------- fliperama ----------
   drawArcade(g, it, now) {
     const s = sprArcade(it.v & 1);
-    g.drawImage(s.c, it.x - s.ax, it.y - s.ay);
+    putS(g, s, it.x, it.y);
     const sp = this.of.world.arcadeSpots.find((p) => p.play && p.cab === it.v);
     const jog = sp && sp.owner ? this.of.actors.get(sp.owner) : null;
     const jogando = !!(jog && jog.arrived && jog.kind === 'arcade' && jog.spot === sp);
@@ -719,7 +731,7 @@ function sprArcade(v) {
     for (let i = 0; i < 5; i++) R(3 + i * 2, -21 + i * 3, 1, 2, 'rgba(255,255,255,0.16)');
     R(5, -17, 6, 9, '#241b46'); R(5, -17, 6, 1, '#3a2f64'); R(6, -15, 1, 2, '#ff9a3c'); R(9, -15, 1, 2, '#ff9a3c'); R(6, -11, 4, 1, '#3a2f64');   // fichas
     R(1, -3, 14, 3, '#241b46'); R(1, -3, 14, 1, '#3a2f64');
-  }));
+  }, OL));
 }
 // tela parada: título piscando e "insira a ficha"
 function atracao(g, X, Y, now) {
@@ -738,7 +750,7 @@ function textoFx(txt, fs) {
   return cached(`FX|${fs}|${txt}`, () => {
     const f2 = Math.round(fs * 1.45), font = `italic 900 ${f2}px ${FONT_STACK}`;
     const w = Math.ceil(textW(font, txt)) + f2, h = Math.round(f2 * 1.6);
-    const [c, g] = makeCanvas(w, h);
+    const [c, g] = rawCanvas(w, h);
     g.imageSmoothingEnabled = true;
     g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
     g.lineWidth = Math.max(3, Math.round(f2 * 0.3)); g.strokeStyle = '#4a1010'; g.strokeText(txt, w / 2, h / 2);

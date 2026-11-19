@@ -1,6 +1,7 @@
 /* app.js — liga os dados (SSE / polling / demo) à cena e à interface em volta. */
 import { Office } from './render.js';
 import { Detalhe } from './detalhe.js';
+import { apelido, liberar } from './apelidos.js';
 
 const $ = (id) => document.getElementById(id);
 const DEMO = new URLSearchParams(location.search).get('demo') === '1';
@@ -33,6 +34,13 @@ function aplicarTema() {
 aplicarTema();
 window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', aplicarTema);
 office.setHidden(ocultas);
+// escala da interface (CSS --ui: 1 no Full HD, maior em 2K e 4K): o texto da sala acompanha
+const escalaUI = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
+office.setEscalaUI(escalaUI());
+window.addEventListener('resize', () => office.setEscalaUI(escalaUI()));
+// no celular o detalhe é uma folha embaixo: a câmera centra o agente na parte de cima, que continua à vista
+function ajustarFolha() { office.setInsetBaixo(NARROW.matches && detalhe.aberto() ? $('detalhe').offsetHeight * office.dpr : 0); }
+window.addEventListener('resize', () => ajustarFolha());
 // animações de situação (gags.js): ligadas por padrão; o botão de estrela desliga e a escolha fica guardada
 let gagsLigadas = carregar('gags', true) !== false;
 function aplicarGags() {
@@ -52,8 +60,10 @@ office.onSelect = (id, info) => {
   if (!(info && info.touch)) mostrarDica(hoverDado, info ? info.x : 0, info ? info.y : 0);
   else atualizarDicaFixa();
   // clicar num agente abre o detalhe; clicar no vazio fecha
-  if (id) { detalhe.abrir(id); if (!NARROW.matches) { const a = office.actors.get(id); if (a && coberto(a)) centrar(id); } }
-  else detalhe.fechar({ avisar: false });
+  // a câmera passa a acompanhar o agente ANTES de a barra lateral abrir: a sala não se rearruma quando a tela encolhe
+  if (id) { if (!(info && info.touch)) { dica.hidden = true; dicaId = null; }   // a barra lateral já mostra tudo
+    office.focar(id); detalhe.abrir(id); ajustarFolha(); }
+  else { detalhe.fechar({ avisar: false }); office.soltar(); ajustarFolha(); }
 };
 
 // ---------- botões da câmera e do painel ----------
@@ -68,7 +78,10 @@ function definirPainel(aberto) {
   guardar(NARROW.matches ? 'painel-estreito' : 'painel', aberto);
 }
 const painelAberto = () => $('app').dataset.painel === 'aberto';
-$('btn-painel').addEventListener('click', () => definirPainel(!painelAberto()));
+$('btn-painel').addEventListener('click', () => {
+  if (detalhe.aberto() && !NARROW.matches) { detalhe.fechar(); definirPainel(true); return; }   // a barra lateral do detalhe volta a ser a lista
+  definirPainel(!painelAberto());
+});
 $('alca').addEventListener('click', () => definirPainel(!painelAberto()));
 // estado inicial: aberto no desktop, fechado (só a alça) no celular
 definirPainel(carregar(NARROW.matches ? 'painel-estreito' : 'painel', !NARROW.matches));
@@ -110,24 +123,12 @@ function destacar(id) {      // marca na cena (sem abrir nada); se o agente aind
   office.setSelected(existe ? id : null);
   realcarSelecao();
 }
-// a gaveta cobre o lado direito da cena no desktop: o agente fica no meio da parte que sobra
-function areaLivre() {
-  const wrap = $('cena-wrap'), palco = wrap.parentElement;
-  const dw = detalhe.aberto() && !NARROW.matches ? $('detalhe').offsetWidth : 0;
-  return { cw: wrap.clientWidth, livre: Math.min(wrap.clientWidth, palco.clientWidth - dw) };
-}
-function coberto(a) {
-  const { livre } = areaLivre();
-  return (a.fx * office.k + office.tx) / office.dpr > livre - 40;
-}
-function centrar(id) {
-  const { cw, livre } = areaLivre();
-  office.centerOn(id, NARROW.matches ? 0 : (cw - livre) * office.dpr);
-}
+// a câmera acompanha o agente do detalhe (e a sala não se rearruma quando a barra lateral abre)
+function centrar(id) { office.focar(id); requestAnimationFrame(ajustarFolha); }
 function selecionarEAbrir(id) {    // pai/filho/subagente: seleciona na cena (se estiver lá) e troca o detalhe
   destacar(id);
-  detalhe.abrir(id);
   if (agentePorId(id)) centrar(id);
+  detalhe.abrir(id);
 }
 const detalhe = new Detalhe({
   raiz: $('detalhe'),
@@ -136,9 +137,9 @@ const detalhe = new Detalhe({
   plat: (id) => platMeta(id),
   tempo,
   buscar: buscarHistorico,
-  aoFechar: () => { selecionado = null; dicaFixa = null; office.setSelected(null); realcarSelecao(); },
+  aoFechar: () => { selecionado = null; dicaFixa = null; office.setSelected(null); office.soltar(); ajustarFolha(); realcarSelecao(); },
   navegar: selecionarEAbrir,
-  aoAbrirDoHash: (id) => destacar(id),
+  aoAbrirDoHash: (id) => { destacar(id); if (agentePorId(id)) office.focar(id); },
 });
 window.__escritorio.detalhe = detalhe;
 
@@ -225,7 +226,7 @@ function renderLista() {
       const pai = a.paiId && !ags.some((x) => x.id === a.paiId) ? agentePorId(a.paiId) : null;
       const classe = ['item', a.id === selecionado ? 'sel' : '', rel.has(a.id) ? 'rel' : ''].filter(Boolean).join(' ');
       html += `<li class="${classe}" data-id="${esc(a.id)}" data-nivel="${nivel}" style="--nivel:${nivel}"><button type="button" class="item-btn" data-id="${esc(a.id)}" data-e="${esc(a.estado)}">`
-        + `<span class="item-nome">${esc(a.nome || a.id)}${pai ? `<small>chamado por ${esc(pai.nome || pai.id)}</small>` : a.papel === 'subagente' && nivel === 0 ? '<small>subagente</small>' : ''}</span>`
+        + `<span class="item-nome">${esc(a.apelido || a.nome || a.id)}<small>${esc(a.nome || '')}${pai ? ` · chamado por ${esc(pai.apelido || pai.nome || pai.id)}` : a.papel === 'subagente' && nivel === 0 ? ' · subagente' : ''}</small></span>`
         + `<span class="badge" style="--c:var(--e-${esc(ESTADOS.includes(a.estado) ? a.estado : 'ocioso')})">${esc(a.estado)}</span>`
         + `<span class="item-det${det ? '' : ' sem'}">${esc(det || (a.titulo || a.projeto || '—'))}</span>`
         + `<span class="item-tempo" data-desde="${Number(a.desde) || 0}">${esc(tempo(a.desde))}</span></button></li>`;
@@ -248,8 +249,8 @@ $('lista').addEventListener('click', (e) => {
   const id = b.dataset.id;
   selecionado = id; dicaFixa = null;
   office.setSelected(id);
-  detalhe.abrir(id);
   centrar(id);
+  detalhe.abrir(id);
   realcarSelecao();
   if (NARROW.matches) definirPainel(false); // no celular, recolhe a gaveta para ver a cena
 });
@@ -271,14 +272,15 @@ function conteudoDica(a) {
   const p = platMeta(a.plataforma);
   const linhas = [];
   const add = (k, v) => { if (v) linhas.push(`<dt>${k}</dt><dd>${esc(v)}</dd>`); };
+  if (a.ferramenta || a.detalhe) add('Fazendo', detalheTexto(a));
+  add('Agente', a.nome);
   add('Plataforma', p.nome);
   add('Projeto', a.projeto);
   add('Título', a.titulo);
-  if (a.ferramenta || a.detalhe) add('Ferramenta', detalheTexto(a));
   add('Modelo', a.modelo);
-  if (a.papel && a.papel !== 'principal') add('Papel', a.papel === 'chamado' ? 'chamado por ' + ((agentePorId(a.paiId) || {}).nome || 'outro agente') : a.papel);
+  if (a.papel && a.papel !== 'principal') { const pai = agentePorId(a.paiId) || {}; add('Papel', a.papel === 'chamado' ? 'chamado por ' + (pai.apelido || pai.nome || 'outro agente') : a.papel); }
   linhas.push(`<dt>No estado</dt><dd data-desde="${Number(a.desde) || 0}">${esc(tempo(a.desde))}</dd>`);
-  return `<div class="dica-topo"><span class="bolinha" style="--c:${esc(p.cor || '#8b93a1')}"></span><b>${esc(a.nome || a.id)}</b>`
+  return `<div class="dica-topo"><span class="bolinha" style="--c:${esc(p.cor || '#8b93a1')}"></span><b>${esc(a.apelido || a.nome || a.id)}</b>`
     + `<span class="badge" style="--c:var(--e-${esc(ESTADOS.includes(a.estado) ? a.estado : 'ocioso')})">${esc(a.estado)}</span></div><dl>${linhas.join('')}</dl>`;
 }
 function posicionarDica(cx, cy) {
@@ -318,12 +320,14 @@ function renderTudo() {
 }
 function aplicar(novo) {
   if (!novo || !Array.isArray(novo.agentes)) return;
+  for (const a of novo.agentes) if (a && a.id) a.apelido = apelido(a.id);       // nome curto de gente (Ana, Brad...)
+  liberar(new Set(novo.agentes.map((a) => a && a.id)));
   estado = { plataformas: Array.isArray(novo.plataformas) ? novo.plataformas : [], agentes: novo.agentes, geradoEm: novo.geradoEm };
   if (selecionado && !agentePorId(selecionado)) { selecionado = null; office.setSelected(null); }
   office.setState(estado);
   renderTudo();
   detalhe.atualizarEstado();
-  if (detalhe.aberto() && selecionado !== detalhe.id && agentePorId(detalhe.id)) destacar(detalhe.id);   // aberto pelo endereço (#agente=…)
+  if (detalhe.aberto() && selecionado !== detalhe.id && agentePorId(detalhe.id)) { destacar(detalhe.id); office.focar(detalhe.id); }   // aberto pelo endereço (#agente=…)
 }
 
 window.__escritorio.aplicar = aplicar;
